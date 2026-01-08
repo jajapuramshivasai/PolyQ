@@ -1,9 +1,10 @@
 [build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
+requires = ["maturin>=1.5,<2.0"]
+build-backend = "maturin"
 
-[tool.setuptools]
-packages = ["PolyQ"]
+[tool.maturin]
+python-source = "PolyQ"
+module-name = "polyq_backend"
 
 [project]
 name = "PolyQ"

@@ -4,6 +4,7 @@ PolyQ/utils/qasm_to_poly.py
 build/
 dist/
 PolyQ.egg-info/
+target/
 /main-benchmark.ipynb 
 /testing_things.ipynb
 /emails 

@@ -1,0 +1,13 @@
+[package]
+name = "polyq_backend"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "polyq_backend"
+crate-type = ["cdylib"]
+
+[dependencies]
+num-complex = "0.4"
+numpy = "0.21"
+pyo3 = { version = "0.21", features = ["extension-module"] }
