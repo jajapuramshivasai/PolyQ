@@ -5,9 +5,13 @@ edition = "2021"
 
 [lib]
 name = "polyq_backend"
-crate-type = ["cdylib"]
+# Default library crate type (rlib) — Python interfacing removed
 
 [dependencies]
 num-complex = "0.4"
-numpy = "0.21"
-pyo3 = { version = "0.21", features = ["extension-module"] }
+rand = "0.8"
+
+
+[[bin]]
+name = "benchmarker"
+path = "Rust_Benchmark/Benchmakr.rs"
