@@ -75,8 +75,7 @@ flowchart TD
     F --> K[Simulation routines]
     G --> L[Optimization helpers]
     C --> M[Modular arithmetic]
-    A -.-> N[Benchmakr.rs (Benchmark Binary)]
-    N --> A
+    N[Benchmakr.rs (Benchmark Binary)] --> A
     N --> O[Results Output]
     N --> P[Statevector Norm]
     N --> Q[Performance Metrics]
