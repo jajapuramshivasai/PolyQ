@@ -2,6 +2,7 @@ pub mod polynomial;
 pub mod ring_math;
 pub mod dataset;
 pub mod engine;
+pub mod gateset;
 pub mod simulation;
 pub mod poly_opt;
 

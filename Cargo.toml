@@ -14,4 +14,4 @@ rand = "0.8"
 
 [[bin]]
 name = "benchmarker"
-path = "Rust_Benchmark/Benchmakr.rs"
+path = "Rust_Benchmark/Benchmark.rs"

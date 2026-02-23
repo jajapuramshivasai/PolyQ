@@ -20,7 +20,7 @@ This will build all Rust code in release mode for best performance. The compiled
 To run the benchmark executable:
 
 ```
-cargo run --release --bin Benchmakr -- <N> <G> <SEED>
+cargo run --release --bin Benchmark -- <N> <G> <SEED>
 ```
 - `<N>`: Number of qubits (default: 8)
 - `<G>`: Number of gates (default: 1000)
@@ -29,7 +29,7 @@ cargo run --release --bin Benchmakr -- <N> <G> <SEED>
 Example:
 
 ```
-cargo run --release --bin Benchmakr -- 10 2000 123
+cargo run --release --bin benchmarker -- 10 2000 123
 ```
 
 Alternatively, you can run the binary directly after building:
@@ -63,24 +63,49 @@ The following flowchart illustrates the architecture of the PolyQ backend and it
 
 ```mermaid
 flowchart TD
-    A[PolyQ Backend Library] --> B[polynomial.rs]
-    A --> C[ring_math.rs]
-    A --> D[dataset.rs]
-    A --> E[engine.rs]
-    A --> F[simulation.rs]
-    A --> G[poly_opt.rs]
-    B --> H[Polynomial struct]
-    D --> I[Dataset struct]
-    E --> J[Engine struct]
-    F --> K[Simulation routines]
-    G --> L[Optimization helpers]
-    C --> M[Modular arithmetic]
-    N[Benchmakr.rs (Benchmark Binary)] --> A
-    N --> O[Results Output]
-    N --> P[Statevector Norm]
-    N --> Q[Performance Metrics]
+A[PolyQ Rust Library]
+A --> B[polynomial.rs]
+A --> C[ring_math.rs]
+A --> D[dataset.rs]
+A --> E[engine.rs]
+A --> F[simulation.rs]
+A --> G[poly_opt.rs]
+B --> H[Polynomial struct]
+D --> I[Dataset struct]
+E --> J[Engine struct]
+F --> K[Simulation routines]
+G --> L[Optimization helpers]
+C --> M[Modular arithmetic]
+
+%% Descriptions as tooltips
+click B "#" "Handles polynomial arithmetic and representations"
+click C "#" "Implements modular arithmetic for ring operations"
+click D "#" "Manages datasets and data loading"
+click E "#" "Core engine logic and orchestration"
+click F "#" "Simulation routines for quantum/classical systems"
+click G "#" "Helpers for polynomial optimization"
+click H "#" "Main struct for polynomial objects"
+click I "#" "Main struct for dataset objects"
+click J "#" "Main struct for engine logic"
+click K "#" "Functions for running simulations"
+click L "#" "Utility functions for optimization"
+click M "#" "Implements modular arithmetic functions"
+
+%% Color styling with dark text
+classDef main fill:#f9f,stroke:#333,stroke-width:2px,color:#111;
+classDef file fill:#bbf,stroke:#222,stroke-width:1.5px,color:#111;
+classDef struct fill:#bfb,stroke:#222,stroke-width:1.5px,color:#111;
+class A main;
+class B file;
+class C file;
+class D file;
+class E file;
+class F file;
+class G file;
+class H struct;
+class I struct;
+class J struct;
+class K struct;
+class L struct;
+class M struct;
 ```
-
----
-
-For any issues, ensure you have the required dependencies in your `Cargo.toml` (see the top of `Benchmakr.rs` for used crates).
