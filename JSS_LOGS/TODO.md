@@ -12,12 +12,12 @@ Explore ways to parallize and accelerate the simulation
 
 Extend to other Functionalities like expectation values and peaked quantum circuits
 
-Utilize lower precision Ints for storing poly eg(see Stefan Krastanov)
+Utilize lower precision Ints and custom structs for storing poly eg(see Stefan Krastanov)
 
 Utilize C FFI cereated by Rust for multi Language Compatability and HPC
 
 Define Quantum Computability Advantage Metric - {
-    QC can be imagined as Group of Classical Computers Evaluating Differente Inputs and producing a phase when added together finally some destruct while winner states amplify to give quantum advantage-jothi
+    QC can be imagined as Group of Classical Computers Evaluating Inputs/Configuration and producing a phase evolution in time {Feynmen Path formalism} and finally at collapse some destructively interfere while winner states amplify to give quantum advantage -jothi
 }
 
 Implement T gate minimizating techniques while minimixing deviation for transpile optimisation 

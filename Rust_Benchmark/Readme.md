@@ -55,6 +55,33 @@ This will build the documentation for the project and open it in your default we
 
 For more details on documenting Rust code, see: https://doc.rust-lang.org/rustdoc/how-to-write-documentation.html
 
+
+
+## PolyQ Architecture
+
+The following flowchart illustrates the architecture of the PolyQ backend and its benchmark integration:
+
+```mermaid
+flowchart TD
+    A[PolyQ Backend Library] --> B[polynomial.rs]
+    A --> C[ring_math.rs]
+    A --> D[dataset.rs]
+    A --> E[engine.rs]
+    A --> F[simulation.rs]
+    A --> G[poly_opt.rs]
+    B --> H[Polynomial struct]
+    D --> I[Dataset struct]
+    E --> J[Engine struct]
+    F --> K[Simulation routines]
+    G --> L[Optimization helpers]
+    C --> M[Modular arithmetic]
+    A -.-> N[Benchmakr.rs (Benchmark Binary)]
+    N --> A
+    N --> O[Results Output]
+    N --> P[Statevector Norm]
+    N --> Q[Performance Metrics]
+```
+
 ---
 
 For any issues, ensure you have the required dependencies in your `Cargo.toml` (see the top of `Benchmakr.rs` for used crates).
