@@ -1,0 +1,27 @@
+25/1/26-JSS
+
+Seperate P(Input,Output,Intermediate) -> f(Input,Output,Intermediate) + g(Intermediate) and cache g()
+
+Implement Bilinear form sympletic mechanics and block diagonalization techniques for reducing and decoupling Phase polynomial
+
+Decouple P over each sub QC set to prove advantage over MPS/Tensor Networks
+
+Divide Z8 Poly {Clifford +T} to Z2 + Z4 + Z8 for faster intermediate poly evaluation
+
+Explore other universal/exotic gatesets magic{CNOT+T}->{U_swap+phase ,see superquantum}
+
+Exploit Trivial Weight Distribution and cycling for accelerated Evaluating Polynomials
+
+Explore ways to parallize and accelerate the simulation {Easy}
+
+Extend to other Functionalities like expectation /Slater matric and peaked quantum circuit verification
+
+Utilize lower precision Ints and custom structs for storing poly eg(see Stefan Krastanov)
+
+Utilize C FFI cereated by Rust for multi Language Compatability and HPC
+
+Define Quantum Computability Advantage Metric - { QC can be imagined as Group of Classical Computers Evaluating Inputs/Configuration and producing a phase evolution in time {Feynmen Path formalism} and finally at collapse some destructively interfere while winner states amplify to give quantum advantage -jothi }
+
+Implement T gate minimizating techniques while minimixing deviation for transpile optimisation eg rmsynth
+
+Benchmark against Stabilizer state simulators

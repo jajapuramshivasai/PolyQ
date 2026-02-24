@@ -10,3 +10,8 @@ PolyQ.egg-info/
 /acknowledgement
 PolyQ/__pycache__
 /PolyQ/utils/__pycache__
+
+
+# Added by cargo
+
+/target
