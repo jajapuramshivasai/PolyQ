@@ -1,6 +1,5 @@
 //TODO: split output statevector bitstring among all nodes and then combine results at the end
 
-
 /*
 Example: 4 qubits, 16 basis states, 4 workers
 Spawn all workers with f(input,x_i),g(x_i) ,output_bitstring range specific to worker

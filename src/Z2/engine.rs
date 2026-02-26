@@ -4,7 +4,7 @@ use crate::quantum_circuit::QuantumCircuit;
 pub struct PhasePolynomial {
     pub terms: Vec<(i32, Vec<usize>)>,
     pub num_qubits: usize,
-    pub num_vars: usize, // total variables (input + intermediate)
+    pub num_vars: usize,         // total variables (input + intermediate)
     pub output_vars: Vec<usize>, // variable index for each output qubit
 }
 
@@ -18,19 +18,31 @@ pub fn phase_polynomial(circuit: &QuantumCircuit) -> PhasePolynomial {
             "h" => {
                 let q = gate.qubits[0];
                 wire_array[q].push(max_new_var);
-                terms.push((1, vec![wire_array[q][wire_array[q].len()-2], wire_array[q][wire_array[q].len()-1]]));
+                terms.push((
+                    1,
+                    vec![
+                        wire_array[q][wire_array[q].len() - 2],
+                        wire_array[q][wire_array[q].len() - 1],
+                    ],
+                ));
                 max_new_var += 1;
-            },
+            }
             "z" => {
                 let q = gate.qubits[0];
                 terms.push((1, vec![*wire_array[q].last().unwrap()]));
-            },
+            }
             "cz" => {
                 let q0 = gate.qubits[0];
                 let q1 = gate.qubits[1];
-                terms.push((1, vec![*wire_array[q0].last().unwrap(), *wire_array[q1].last().unwrap()]));
-            },
-            _ => {},
+                terms.push((
+                    1,
+                    vec![
+                        *wire_array[q0].last().unwrap(),
+                        *wire_array[q1].last().unwrap(),
+                    ],
+                ));
+            }
+            _ => {}
         }
     }
     // Output variable for each qubit is the last variable on its wire
@@ -45,7 +57,10 @@ pub fn phase_polynomial(circuit: &QuantumCircuit) -> PhasePolynomial {
 
 use num_complex::Complex;
 
-pub fn simulate_phase_polynomial(poly: &PhasePolynomial, input_bitstring: &[bool]) -> Vec<Complex<f64>> {
+pub fn simulate_phase_polynomial(
+    poly: &PhasePolynomial,
+    input_bitstring: &[bool],
+) -> Vec<Complex<f64>> {
     use std::collections::HashSet;
     let n = poly.num_qubits;
     let t = poly.num_vars;
@@ -56,7 +71,11 @@ pub fn simulate_phase_polynomial(poly: &PhasePolynomial, input_bitstring: &[bool
     let input_vars: HashSet<usize> = (0..n).collect();
     let output_vars: HashSet<usize> = poly.output_vars.iter().copied().collect();
     let all_vars: HashSet<usize> = (0..t).collect();
-    let intermediate_vars: Vec<usize> = all_vars.difference(&input_vars).filter(|v| !output_vars.contains(v)).copied().collect();
+    let intermediate_vars: Vec<usize> = all_vars
+        .difference(&input_vars)
+        .filter(|v| !output_vars.contains(v))
+        .copied()
+        .collect();
     let num_intermediate = intermediate_vars.len();
 
     // For each output bitstring (basis state)
@@ -85,7 +104,11 @@ pub fn simulate_phase_polynomial(poly: &PhasePolynomial, input_bitstring: &[bool
                     phase += *weight;
                 }
             }
-            let sign = if ((phase % 2 + 2) % 2) == 0 { 1.0 } else { -1.0 };
+            let sign = if ((phase % 2 + 2) % 2) == 0 {
+                1.0
+            } else {
+                -1.0
+            };
             amp += Complex::new(sign, 0.0);
         }
         state[i] = amp;
@@ -100,7 +123,6 @@ pub fn simulate_phase_polynomial(poly: &PhasePolynomial, input_bitstring: &[bool
     state
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -113,10 +135,26 @@ mod tests {
         let circuit = QuantumCircuit {
             num_qubits: 2,
             gates: vec![
-                Gate { name: "h".to_string(), qubits: vec![0], params: vec![] },
-                Gate { name: "h".to_string(), qubits: vec![1], params: vec![] },
-                Gate { name: "cz".to_string(), qubits: vec![0, 1], params: vec![] },
-                Gate { name: "h".to_string(), qubits: vec![1], params: vec![] }
+                Gate {
+                    name: "h".to_string(),
+                    qubits: vec![0],
+                    params: vec![],
+                },
+                Gate {
+                    name: "h".to_string(),
+                    qubits: vec![1],
+                    params: vec![],
+                },
+                Gate {
+                    name: "cz".to_string(),
+                    qubits: vec![0, 1],
+                    params: vec![],
+                },
+                Gate {
+                    name: "h".to_string(),
+                    qubits: vec![1],
+                    params: vec![],
+                },
             ],
         };
         let poly = phase_polynomial(&circuit);
