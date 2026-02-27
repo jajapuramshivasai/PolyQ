@@ -1,2 +1,14 @@
-TODO:
-U2 gate and Ross-Selinger algorithm
+TODO:                                                           
+
+Phase 1 Deadline march 8 - 26
+1. U2 gate and Ross-Selinger algorithm (Grid Synth) 
+2. Complete {Optimise_Polynoimal.rs}
+
+Phase 2 Deadline {-}
+1. Implement Weight shift algorithm {notes_weight_cycle.py}
+2. Implement symplectic evaluation alogrithm {notes_symplectic}
+
+Phase 3 Deadline {-}
+1. Complete {Distribute.rs} i.e parallization(MP) 
+2. Explore & Prove MPS complexity match
+
