@@ -1,3 +1,5 @@
+// gateset {H,Z,S,T,CZ,CS,CT}
+
 #[cfg(test)]
 mod phase_poly_tests {
     use super::*;

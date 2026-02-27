@@ -9,5 +9,4 @@ pub mod Z8 {
 }
 pub mod Distribute;
 pub mod Transpile_circuit;
-pub mod Transpile_polynomial;
 pub mod quantum_circuit;

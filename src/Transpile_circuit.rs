@@ -1,6 +1,6 @@
 //Clifford Gate accepted by poly q {H,Z,CZ}
 //Clifford+S Gate accepted by poly q {H,Z,CZ,S}
-//Clifford+T Gate accepted by poly q {H,Z,CZ,T}
+//Clifford+T Gate accepted by poly q {H,Z,CZ,S,T}
 
 use crate::quantum_circuit::{Gate, QuantumCircuit, QuantumCircuitClass};
 
@@ -103,3 +103,38 @@ pub fn transpile_to_gateset(
         gates: new_gates,
     }
 }
+
+/*
+FUNCTION Gridsynth(Target_Unitary U, Precision epsilon):
+    
+    1. CONVERSION TO Z[i, 1/sqrt(2)]
+       Map the target rotation U to a candidate point (u, v) 
+       where |u|^2 + |v|^2 = 1.
+       
+    2. DETERMINE SEARCH REGION
+       Define a region (an ellipse) in the complex plane that 
+       contains all points within epsilon-distance of U.
+
+    3. GRID SEARCH (The Core "Solve" Step)
+       # We look for a "Gaussian Integer" approximation
+       FOR each candidate solution z in the search region:
+           IF z satisfies the "unit requirement":
+               # Check if z can be represented as a sum of squares 
+               # in the specific ring Z[sqrt(2), i]
+               Valid_Points.append(z)
+       
+    4. SELECT OPTIMAL POINT
+       Pick the point z from Valid_Points that minimizes T-count 
+       (the point with the smallest "denominator exponent").
+
+    5. EXACT SYNTHESIS (Kliuchnikov's Algorithm)
+       # Once we have the algebraic point, we turn it into gates
+       Gate_Sequence = []
+       WHILE Point != Identity:
+           Find a Clifford+T gate G that reduces the "complexity" 
+           of the Point.
+           Point = G * Point
+           Gate_Sequence.prepend(Inverse(G))
+
+    RETURN Gate_Sequence
+*/
