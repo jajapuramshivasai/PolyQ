@@ -28,6 +28,17 @@ Utilize C FFI cereated by Rust for multi Language Compatability and HPC
 
 Define Quantum Computability Advantage Metric - { QC can be imagined as Group of Classical Computers Evaluating Inputs/Configuration and producing a phase evolution in time {Feynmen Path formalism} and finally at collapse some destructively interfere while winner states amplify to give quantum advantage -jothi }
 
+
+{
+Jothi's Quantumness of an Algorithm is given by number of non trival terms(i.e after reducing) in the phase polynomial
+
+justification: Some pre existing measures : Entanglement, T-Count, H-count
+1. while Entanglement is a key charateristic of quantum computer ,simulating Entanglement alone isnt that difficult e.g Clifford circuit
+2. Addition of T gates helps in spanning any U2 but itself alone isnt hard to simulate e.g MPS Circuit consisting only single qubit gates
+3. We know hadamard gate basically doubles the num trivial ops to be done for single qubit hence requiring to double sparse state vector size
+3. Correct measure would be come combination of all
+}
+
 Implement T gate minimizating techniques while minimixing deviation for transpile optimisation eg rmsynth
 
 Benchmark against Stabilizer state simulators
