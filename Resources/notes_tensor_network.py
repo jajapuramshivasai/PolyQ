@@ -15,7 +15,10 @@
     where V_0, V_1, V_2 are the variable spaces of qubits 0, 1, 2 respectively
 
     note: all the {V}_i are decoupled ie suitable for MPS style Simulation
-
+    
+    Fact: While 1D Tensor Network (MPS) contraction is efficient (P-time), 
+    the exact contraction of 2D Tensor Networks (PEPS) and general 
+    graphs is #P-complete.
 
    
     
