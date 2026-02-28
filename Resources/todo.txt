@@ -42,3 +42,4 @@ justification: Some pre existing measures : Entanglement, T-Count, H-count
 Implement T gate minimizating techniques while minimixing deviation for transpile optimisation eg rmsynth
 
 Benchmark against Stabilizer state simulators
+

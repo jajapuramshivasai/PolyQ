@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 approx = "0.5.1"
 num-complex = "0.4.6"
+rayon = "1.11.0"
