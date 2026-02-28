@@ -209,7 +209,7 @@ Spawn all workers with f(input,x_i),g(x_i) ,output_bitstring range specific to w
 
 Worker 1        || {0000 to 0011} \.  ||
 Worker 2        || {0100 to 0111} /\. || final state vector
-Worker 2        || {1000 to 1011} \/.  ||
+Worker 2        || {1000 to 1011} \/. ||
 Worker 2        || {1100 to 1111} /.  ||
 
 */
@@ -218,9 +218,11 @@ Worker 2        || {1100 to 1111} /.  ||
 /*
 TODO: 
 1. when we distribute across a lot of threads there are redundent variables to loop over for each thred
-like few MSB so for each worker first pre evaluate that and do {optimise_polynomial} for each worker to get a smaller polynomial with fewer variables to loop over
+like few MSB so for each worker first pre evaluate that and do {optimise_polynomial} 
+for each worker to get a smaller polynomial with fewer variables to loop over
+gray code to cache non changing variables across iterations of the inner loop
 2. Integrate with other simulation techniques e.g weight cycle, sympletic etc
-3. Implement MPI version for distributed execution across machines
+3. Implement rsmpi support for distributed execution across machines
 */
 
 
