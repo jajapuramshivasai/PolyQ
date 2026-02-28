@@ -1,17 +1,32 @@
-Results/run2/arbitrary_h/circuits
-polyq-venv
-PolyQ/utils/qasm_to_poly.py
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+env/
+venv/
+polyq-venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Distribution / packaging
 build/
 dist/
-PolyQ.egg-info/
-/main-benchmark.ipynb 
-/testing_things.ipynb
-/emails 
-/acknowledgement
-PolyQ/__pycache__
-/PolyQ/utils/__pycache__
 
+# Rust / Cargo
+/target/
 
-# Added by cargo
+# IDEs and editors
+.vscode/
+.idea/
 
-/target
+# macOS
+.DS_Store
+
+# Misc
+*.log
+*.tmp
+*.bak

@@ -1,0 +1,16 @@
+[package]
+name = "PolyQ"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "polyq"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.18", features = ["extension-module"] }
+polyq = { path = ".." }
+
+[package.metadata.maturin]
+name = "PolyQ"
+strip = false

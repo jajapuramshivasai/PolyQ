@@ -1,71 +1,109 @@
-# 🧮 PolyQ
-### A novel approach to simulate Quantum Circuits using Boolean Polynomials.
+PolyQ
+=====
 
-The approach of this simulator is based on the paper first published by Ashley Montanaro in 2017. He, along with previous researchers, proved the connection between Boolean Polynomial and the following Clifford gate set: `{H, Z, CZ, CCZ}`. We extended this approach to include T and S gates, thus making it universal gate set. So the currently supported gate set is `{H, Z, CZ, CCZ, T, S, T†, S†}`
- 
+Overview
+--------
+
+PolyQ is a high-performance, distributed ring-polynomial quantum statevector simulator focused on circuit optimisation, verification, and measuring quantum complexity. The core library is implemented in Rust (sources in `src/`) and is accompanied by Theory and notebooks in `Resources/` and `Benchmark/`.
 
 
-## 🛠️ Get Started 
+Quick start
+-----------
 
-For a demo, look at the [demo](./demo.ipynb) file. It shows how to simulate a random circuit with supported gate set using Qiskit's Aer, MQT's DDSIM and PolyQ. In the end, it shows how to simulate a circuit in one line and get its state vector.
+1. Install Rust (if not installed):
 
-PolyQ for Qiskit `QuantumCircuit` object is available via [PyPI](https://pypi.org/project/PolyQ/0.1.0/) for Linux, macOS, and Windows and supports Python 3.11 and higher.
+   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
-``` bash
-(venv) $ pip install polyq
+2. (Optional but recommended) Create and activate a Python virtual environment, then install notebook requirements:
+
+   python3 -m venv .venv
+   source .venv/bin/activate
+   pip install -r requirements.txt
+
+3. Build and test the Rust crate:
+
+   cargo build --release
+   cargo test
+
+4. Generate docs locally:
+
+   cargo doc --no-deps --open
+
+Architecture (high level)
+-------------------------
+
+The repository is organised around a Rust library (`src/`) with pipeline modules for transpilation, optimisation, distribution, and multiple algebraic engines. The following Mermaid diagram provides a compact overview of the layout and relationships.
+
+```mermaid
+flowchart LR
+   subgraph Src [polyq library]
+      crate[polyq crate]:::pkg
+      transpile[Transpile_circuit.rs]
+      optimise[Optimise_Polynomial.rs]
+      distribute[Distribute.rs]
+      circuit[quantum_circuit.rs]
+      engines[Z2 / Z4 / Z8 engines]
+   end
+
+   crate --> transpile
+   crate --> optimise
+   crate --> distribute
+   transpile --> circuit
+   optimise --> circuit
+   distribute --> circuit
+   crate --> engines
+
+   classDef pkg fill:#f3f4f6,stroke:#333,stroke-width:1px,color:#111827;
+   classDef data fill:#eef2ff,stroke:#333,stroke-width:1px,color:#111827;
+   classDef build fill:#ecfdf5,stroke:#333,stroke-width:1px,color:#111827;
 ```
 
-The following code gives an example on the usage:
-```python
-from qiskit import QuantumCircuit
-import PolyQ
+Development notes
+-----------------
 
-# GHZ state: 
-# |GHZ⟩ = (|000⟩ + |111⟩) / √2
-# Using the property: X = HZH
-circ = QuantumCircuit(3)
-circ.h(0)
-circ.h(1)
-circ.cz(0, 1)
-circ.h(1)
-circ.h(2)
-circ.cz(1, 2)
-circ.h(2)
+- Build (debug): `cargo build`
+- Build (release): `cargo build --release`
+- Test: `cargo test` (use `cargo test <name>` for a specific test)
+- Format: `cargo fmt` (install via `rustup component add rustfmt`)
+- Lint: `cargo clippy` (install via `rustup component add clippy`)
+- Docs: `cargo doc --no-deps --open`
+- Benchmarks: `cargo bench` or run `Benchmark/benchmark.rs` and the notebooks in `Benchmark/`.
 
-print(circ.draw(fold=-1))
+Python / Notebooks
+------------------
 
-st_vec = PolyQ.simulate(circ)
+- Create and activate a venv: `python3 -m venv .venv` then `source .venv/bin/activate`.
+- Install dependencies: `pip install -r requirements.txt`.
+- Open notebooks: `jupyter notebook` and open files in `Benchmark/`.
 
-print(st_vec)
-```
+Using the crate from other Rust projects
+---------------------------------------
 
-## 📖 References
+Add the local crate by path in the other project's `Cargo.toml`:
 
-The full list of references used in the development of PolyQ is available in [`references.bib`](./references.bib).  
-This file contains BibTeX entries for academic papers, libraries, and resources cited in the project and the upcoming paper.
+    [dependencies]
+    polyq = { path = "../PolyQ" }
 
+Contributing
+------------
 
-## 📚 Citation
+Please open PRs with tests and documentation updates for public APIs. Run `cargo fmt` and `cargo clippy` before submitting changes.
 
-If you want to cite the **PolyQ**, please use the following format or BibTeX entry:
+Files of interest
+-----------------
+- `src/`: Rust library (core implementation)
+- `Resources/`: helper scripts and notes
+- `Benchmark/`: notebooks and benchmark harnesses
+- `requirements.txt`: Python dependencies for notebooks
 
-PolyQ: A novel approach to simulate Quantum Circuits using Boolean Polynomials.  
-Author(s): C. A. Jothishwaran, Aarav Ratra, Satyam Sonaniya   
-Affiliation: IIT Roorkee  
-Repository: https://github.com/QSDAL-IITR/PolyQ  
-Version: v0.1.0  
-DOI: *To be added*  
-Preprint / Paper: *To be added*  
-License: Proprietary
+License
+-------
 
-### BibTeX :
-```bibtex
-@misc{polyq2025,
-  title        = {PolyQ: A novel approach to simulate Quantum Circuits using Boolean Polynomials.},
-  author       = {C. A. Jothishwaran and Aarav Ratra and Satyam Sonaniya},
-  year         = {2025},
-  note         = {Version 0.1.0. Available at \url{https://github.com/QSDAL-IITR/PolyQ}},
-  howpublished = {\url{https://github.com/QSDAL-IITR/PolyQ}},
-  license      = {Proprietary},
-}
-```
+See the `LICENSE` file in the repository root for terms.
+
+Contact / Next steps
+--------------------
+
+If you want, I can add a small example demonstrating crate usage, a `Makefile`/`justfile` for common tasks, or run `cargo test`/`cargo doc` here and report the results.
+
+Enjoy working with the project!
