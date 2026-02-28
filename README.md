@@ -12,22 +12,30 @@ Quick start
 
 1. Install Rust (if not installed):
 
-   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
 
-2. (Optional but recommended) Create and activate a Python virtual environment, then install notebook requirements:
+2. (Optional) Python notebooks — create a virtual environment and install requirements:
 
-   python3 -m venv .venv
-   source .venv/bin/activate
-   pip install -r requirements.txt
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
 
 3. Build and test the Rust crate:
 
-   cargo build --release
-   cargo test
+```bash
+cargo build --release
+cargo test
+```
 
-4. Generate docs locally:
+4. Generate local docs:
 
-   cargo doc --no-deps --open
+```bash
+cargo doc --no-deps --open
+```
 
 Architecture (high level)
 -------------------------
@@ -89,21 +97,9 @@ Contributing
 
 Please open PRs with tests and documentation updates for public APIs. Run `cargo fmt` and `cargo clippy` before submitting changes.
 
-Files of interest
------------------
-- `src/`: Rust library (core implementation)
-- `Resources/`: helper scripts and notes
-- `Benchmark/`: notebooks and benchmark harnesses
-- `requirements.txt`: Python dependencies for notebooks
 
 License
 -------
 
 See the `LICENSE` file in the repository root for terms.
 
-Contact / Next steps
---------------------
-
-If you want, I can add a small example demonstrating crate usage, a `Makefile`/`justfile` for common tasks, or run `cargo test`/`cargo doc` here and report the results.
-
-Enjoy working with the project!
