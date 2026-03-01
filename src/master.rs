@@ -1,0 +1,4 @@
+/*
+contains the master function which calls the transpile function and the distribute function
+accrording to the input parameters. manages resources and slaves
+*/

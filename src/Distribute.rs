@@ -219,6 +219,60 @@ Worker 2        || {0100 to 0111} /\. || final state vector
 Worker 2        || {1000 to 1011} \/. ||
 Worker 2        || {1100 to 1111} /.  ||
 
+### Algorithm: Distributed Phase Polynomial Simulation with Gray Code
+**Input**: PhasePolynomialZ8 (terms, wire_array), input_bitstring, num_workers
+**Output**: Statevector (Vec<Complex>)
+
+1.  **Preprocessing & Setup**
+    * Set `n` = number of qubits; `t` = total variables.
+    * Set `free_bits` = `t - n`.
+    * Set `x_range` = $2^{free\_bits}$ (Use `u128` to prevent overflow).
+    * **Bit-to-Term Mapping**: 
+        * Create a map where each free bit index `i` points to a list of terms containing it.
+        * Store each term as `(weight, bitmask_of_other_bits)` for fast dependency checking.
+    * **Partitioning**: Divide the output statevector range ($2^n$) into `num_workers` chunks.
+
+2.  **Parallel Execution (For each Worker)**
+    * Define `start` and `end` indices for the worker's assigned chunk.
+    * Allocate `counts[local_dim][8]` initialized to zero (stores frequency of phase residues 0-7).
+
+3.  **Sum-over-Paths with Gray Code**
+    * Initialize `gray_code` = 0.
+    * Initialize `current_phase` = evaluate_polynomial(input_bitstring, all_free_bits_zero).
+    
+    * **Loop** `y` from 0 to `x_range - 1`:
+        * **Step A: Determine Output Index**
+            * Calculate `chosenbits` based on `gray_code` and `wire_array` (Logical mapping).
+        
+        * **Step B: Update Counts**
+            * If `chosenbits` is within `[start, end)`:
+                * Increment `counts[chosenbits - start][current_phase]`.
+
+        * **Step C: Incremental Transition** (Skip on last iteration)
+            * Identify the bit `i` that flips in the next Gray Code: `next_y = (y+1) ^ ((y+1) >> 1)`.
+            * `flipped_bit_idx = trailing_zeros(y ^ next_y)`.
+            * For each `term` in `bit_to_terms[flipped_bit_idx]`:
+                * If all *other* bits in the term mask are `1` in the current `gray_code`:
+                    * If bit `i` is flipping `0 -> 1`: `current_phase = (current_phase + weight) mod 8`.
+                    * Else (flipping `1 -> 0`): `current_phase = (current_phase - weight) mod 8`.
+            * `gray_code = next_y`.
+
+4.  **Amplitude Synthesis**
+    * For each `index` in worker's range:
+        * `amplitude = 0`.
+        * For `r` from 0 to 7:
+            * If `counts[index][r] > 0`:
+                * `amplitude += counts[index][r] * exp(i * r * PI / 4)`.
+        * `statevector[index] = amplitude * 2^(-0.5 * free_bits)`.
+
+5.  **Collect and Return** combined statevector from all workers.
+
+Complexity Reduction: Standard evaluation is O(Terms⋅2 ^free_bits). 
+Gray Code updates reduce this to O(AvgTermsPerBit⋅2 ^free_bits).
+
+Memory Efficiency: By using 8-slot integer counters per basis state instead of complex numbers, we significantly reduce cache misses and memory pressure during the hot loop.
+
+Branch Pruning: The bitmask check (gray_code & mask) == mask allows the CPU to skip entire groups of terms that are currently "inactive" (evaluating to zero)
 */
 
 /*
