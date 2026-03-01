@@ -12,6 +12,8 @@ Explore other universal/exotic gatesets magic{CNOT+T}->{U_swap+phase ,see superq
 
 Exploit Trivial Weight Distribution and cycling for accelerated Evaluating Polynomials
 
+for lone terms use pivot logic
+
 bit shift algo evaly p(outputs{x1,x2,..}) + h(x2, ..) then p(outputs{~x1,x2,..}) + h(x2,..) 
 
 https://arxiv.org/pdf/1808.00128 - sample
@@ -20,7 +22,7 @@ Parameter shift rule for RZ gate  <U.RZ.S.V - U.RZ.Sdg.V > to calculate efficien
 
 Explore ways to parallize and accelerate the simulation {Easy}
 
-Extend to other Functionalities like expectation /Slater matric and peaked quantum circuit verification
+Extend to other Functionalities like expectation peaked quantum circuit verification
 
 Utilize lower precision Ints and custom structs for storing poly eg(see Stefan Krastanov)
 
