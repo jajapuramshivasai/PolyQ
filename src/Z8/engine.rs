@@ -335,6 +335,40 @@ pub fn simulate_phase_polynomial_z8(
         }
         state[*k] = amp * norm;
     }
-    println!("[DEBUG] state = {:?}", state);
     state
+}
+
+#[cfg(test)]
+mod qasm_tests {
+    use super::*;
+    use crate::Transpile_circuit::transpile_to_gateset;
+    use num_complex::Complex;
+    use approx::assert_relative_eq;
+    use std::path::PathBuf;
+    use std::time::Instant;
+
+    #[test]
+    fn test_clifford_t_21q_8_from_qasm2() {
+        let qasm_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("Benchmark/qasm2_exports/clifford_t_21q_8.qasm2");
+        let circuit = QuantumCircuit::from_qasm_file(&qasm_path)
+            .expect("failed to parse qasm export");
+        let class = circuit.classify();
+        let transpiled = transpile_to_gateset(&circuit, class);
+        let poly = phase_polynomial_z8(&transpiled);
+        let start = Instant::now();
+        let state = simulate_phase_polynomial_z8(&poly, &vec![false; transpiled.num_qubits]);
+        let elapsed = start.elapsed();
+        println!(
+            "[TIMING] simulated {}-qubit Clifford+T circuit in {:?}",
+            transpiled.num_qubits,
+            elapsed
+        );
+        assert_normalized(&state);
+    }
+
+    fn assert_normalized(state: &[Complex<f64>]) {
+        let norm_sq: f64 = state.iter().map(|c| c.norm_sqr()).sum();
+        assert_relative_eq!(norm_sq, 1.0, epsilon = 1e-10);
+    }
 }

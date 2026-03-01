@@ -36,92 +36,128 @@ pub fn distributed_statevector_z8(
     assert!(t >= n, "num_vars must be >= num_qubits");
     let free_bits = t - n;
     let x_range = 1usize << free_bits;
-    let chunk_size = (dim + num_workers - 1) / num_workers;
 
     // Precompute wire outputs (one per logical output bit) and sanity-check
     let ovs: Vec<usize> = poly.wire_array.iter().map(|w| *w.last().unwrap()).collect();
     assert_eq!(ovs.len(), n, "wire_array must contain one output per qubit");
 
+    // Map each free variable to the terms that depend on it for incremental updates
+    let terms_by_free_bit: Vec<Vec<usize>> = if free_bits > 0 {
+        let mut map = vec![Vec::new(); free_bits];
+        for (term_idx, (_weight, idxs)) in poly.terms.iter().enumerate() {
+            for &var in idxs {
+                if let Some(free_idx) = var.checked_sub(n) {
+                    if free_idx < free_bits {
+                        map[free_idx].push(term_idx);
+                    }
+                }
+            }
+        }
+        map
+    } else {
+        Vec::new()
+    };
+
     // Precompute constant factors
     let norm = (2f64).powf(-0.5 * (free_bits as f64));
-    let phase_angles: [f64; 8] = [
-        0.0,
-        PI / 4.0,
-        PI / 2.0,
-        3.0 * PI / 4.0,
-        PI,
-        5.0 * PI / 4.0,
-        3.0 * PI / 2.0,
-        7.0 * PI / 4.0,
+    let phase_weights: [Complex<f64>; 8] = [
+        Complex::from_polar(1.0, 0.0),
+        Complex::from_polar(1.0, PI / 4.0),
+        Complex::from_polar(1.0, PI / 2.0),
+        Complex::from_polar(1.0, 3.0 * PI / 4.0),
+        Complex::from_polar(1.0, PI),
+        Complex::from_polar(1.0, 5.0 * PI / 4.0),
+        Complex::from_polar(1.0, 3.0 * PI / 2.0),
+        Complex::from_polar(1.0, 7.0 * PI / 4.0),
     ];
 
-    (0..num_workers)
+    // split the free-variable space instead of output indices
+    let y_chunk = (x_range + num_workers - 1) / num_workers;
+
+    // Each worker returns a partial amplitude vector for the full output dimension
+    let partials: Vec<Vec<Complex<f64>>> = (0..num_workers)
         .into_par_iter()
-        .flat_map_iter(|worker_id| {
-            let start = worker_id * chunk_size;
-            let end = ((worker_id + 1) * chunk_size).min(dim);
+        .map(|worker_id| {
+            let y_start = worker_id * y_chunk;
+            let y_end = ((worker_id + 1) * y_chunk).min(x_range);
 
-            // Only allocate storage for the worker's chunk to save memory.
-            // This uses about (end-start) * 8 * 4 bytes per worker instead of dim * 8 * 4.
-            let local_dim = end - start;
-            let mut counts = vec![[0u32; 8]; local_dim];
+            // create per-worker partial state vector
+            let mut partial = vec![Complex::new(0.0, 0.0); dim];
 
-            // Reusable buffer for full variable assignment
+            // prepare assignment vector and fill input bits
             let mut x = vec![false; t];
             for (j, &b) in input_bitstring.iter().enumerate() {
                 x[j] = b;
             }
 
-            // Iterate over all assignments to free variables once
-            for y in 0..x_range {
-                // Fill free variables. Preserve previous MSB-first mapping used in original code:
+            // initialize free bits to y_start's Gray code, and compute initial term activity/phase
+            let mut term_active = vec![false; poly.terms.len()];
+            let mut current_phase = 0i32;
+            if y_start < y_end {
+                // set free bits according to the Gray code of y_start
+                let mut gray = y_start ^ (y_start >> 1);
                 for ind in 0..free_bits {
-                    let bit = (y >> (free_bits - 1 - ind)) & 1;
+                    let bit = (gray >> (free_bits - 1 - ind)) & 1;
                     x[n + ind] = bit == 1;
                 }
-
-                // Compute output index (chosenbits) using MSB-first mapping to match prior behavior
-                let mut chosenbits = 0usize;
-                for (j, &ov) in ovs.iter().enumerate() {
-                    if x[ov] {
-                        chosenbits |= 1 << (n - 1 - j);
+                // compute activity & phase
+                for (term_idx, (weight, idxs)) in poly.terms.iter().enumerate() {
+                    let active = idxs.iter().all(|&j| x[j]);
+                    term_active[term_idx] = active;
+                    if active {
+                        current_phase = (current_phase + *weight).rem_euclid(8);
                     }
                 }
 
-                // Compute phase residue (0..7)
-                let mut val_out: u8 = 0;
-                for (weight, idxs) in &poly.terms {
-                    let mut v = true;
-                    for &j in idxs {
-                        v &= x[j];
+                for y in y_start..y_end {
+                    // compute output index
+                    let mut chosenbits = 0usize;
+                    for (j, &ov) in ovs.iter().enumerate() {
+                        if x[ov] {
+                            chosenbits |= 1 << (n - 1 - j);
+                        }
                     }
-                    if v {
-                        val_out = (val_out + (*weight as u8)) % 8;
-                    }
-                }
+                    let phase_idx = current_phase as usize;
+                    partial[chosenbits] += phase_weights[phase_idx];
 
-                // Only record counts for indices that belong to this worker's chunk.
-                if chosenbits >= start && chosenbits < end {
-                    counts[chosenbits - start][val_out as usize] += 1;
+                    if y + 1 < y_end {
+                        let next_gray = (y + 1) ^ ((y + 1) >> 1);
+                        let changed = gray ^ next_gray;
+                        let flipped_bit = changed.trailing_zeros() as usize;
+                        debug_assert!(flipped_bit < free_bits);
+                        let free_idx = free_bits - 1 - flipped_bit;
+                        let new_bit = ((next_gray >> flipped_bit) & 1) == 1;
+                        x[n + free_idx] = new_bit;
+                        for &term_idx in &terms_by_free_bit[free_idx] {
+                            let term = &poly.terms[term_idx];
+                            let new_active = term.1.iter().all(|&j| x[j]);
+                            if new_active != term_active[term_idx] {
+                                term_active[term_idx] = new_active;
+                                let delta = if new_active { term.0 } else { -term.0 };
+                                current_phase = (current_phase + delta).rem_euclid(8);
+                            }
+                        }
+                        gray = next_gray;
+                    }
                 }
             }
 
-            // Now convert counts for this worker's range into amplitudes
-            (start..end).map(move |i| {
-                let arr = &counts[i - start];
-                // If all zeros, amplitude is zero
-                if arr.iter().all(|&c| c == 0) {
-                    return Complex::new(0.0, 0.0);
-                }
-                let mut amp = Complex::new(0.0, 0.0);
-                for j in 0..8 {
-                    // magnitude = arr[j], angle = phase_angles[j]
-                    amp += Complex::from_polar(arr[j] as f64, phase_angles[j]);
-                }
-                amp * norm
-            })
+            partial
         })
-        .collect()
+        .collect();
+
+    // reduce partials into a single statevector
+    let mut state = vec![Complex::new(0.0, 0.0); dim];
+    for p in partials {
+        for (i, &c) in p.iter().enumerate() {
+            state[i] += c;
+        }
+    }
+    // apply normalization
+    for amp in &mut state {
+        *amp *= norm;
+    }
+    state
 }
 
 /// Evaluate a function `f` over all bitstrings of length `num_vars`, distributing the work across `num_workers`.
@@ -206,6 +242,36 @@ mod tests {
             assert!((a - b).norm() < 1e-10);
         }
     }
+
+    #[test]
+    fn test_distributed_statevector_large_qasm() {
+        // parse the 21-qubit QASM from benchmarks and compare with baseline
+        use std::path::PathBuf;
+        let qasm_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("Benchmark/qasm2_exports/clifford_t_21q_11.qasm2");
+        let circuit = QuantumCircuit::from_qasm_file(&qasm_path)
+            .expect("failed to parse qasm export");
+        let class = circuit.classify();
+        let transpiled = crate::Transpile_circuit::transpile_to_gateset(&circuit, class);
+        let poly = phase_polynomial_z8(&transpiled);
+        let input = vec![false; transpiled.num_qubits];
+        // compute distributed with several workers
+        // compute baseline once
+        let base = crate::Z8::engine::simulate_phase_polynomial_z8(&poly, &input);
+        // run with varying worker counts and record timings
+        for &workers in &[1usize, 2, 4] {
+            let start = Instant::now();
+            let dist = distributed_statevector_z8(&poly, &input, workers);
+            let dur = start.elapsed();
+            println!("workers {} -> duration {:?}", workers, dur);
+            assert_eq!(dist.len(), base.len());
+            for (a, b) in dist.iter().zip(base.iter()) {
+                assert!((a - b).norm() < 1e-10);
+            }
+            let norm_sq: f64 = dist.iter().map(|c| c.norm_sqr()).sum();
+            assert!((norm_sq - 1.0).abs() < 1e-10);
+        }
+    }
 }
 
 /*
@@ -283,4 +349,5 @@ for each worker to get a smaller polynomial with fewer variables to loop over
 gray code to cache non changing variables across iterations of the inner loop
 2. Integrate with other simulation techniques e.g weight cycle, sympletic etc
 3. Implement rsmpi support for distributed execution across machines
+4. NTT based acceleration
 */
