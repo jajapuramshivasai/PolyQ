@@ -10,7 +10,7 @@ Divide Z8 Poly {Clifford +T} to Z2 + Z4 + Z8 for faster intermediate poly evalua
 
 Explore other universal/exotic gatesets magic{CNOT+T}->{U_swap+phase ,see superquantum}
 
-Exploit Trivial Weight Distribution and cycling for accelerated Evaluating Polynomials
+Exploit Trivial Weight Distribution{DD struct} and cycling for accelerated Evaluating Polynomials
 
 for lone terms use pivot logic
 
