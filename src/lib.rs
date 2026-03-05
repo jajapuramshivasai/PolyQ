@@ -1,8 +1,5 @@
-pub mod Z2 {
-    pub mod engine;
-}
-pub mod Z4 {
-    pub mod engine;
+pub mod Clifford {
+    pub mod clifford;
 }
 pub mod Z8 {
     pub mod engine;

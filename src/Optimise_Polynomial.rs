@@ -1,3 +1,4 @@
+//WIP
 //todo: seperate poly into Z8+z4+z2 which can be sent to their respective engine
 use std::collections::HashMap;
 use crate::Z8::engine::PhasePolynomialZ8;
@@ -20,7 +21,7 @@ pub fn optimize_polynomial(poly: &mut PhasePolynomialZ8) {
         .map(|(idxs, weight)| (weight, idxs))
         .collect();
 
-    // 3. Variable Pruning (Advanced)
+    // 3. Variable Pruning 
     // Identify internal variables (index >= num_qubits) that no longer appear in any terms
     let mut active_vars = std::collections::HashSet::new();
     for (_, idxs) in &poly.terms {
