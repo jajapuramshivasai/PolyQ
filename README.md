@@ -40,6 +40,31 @@ st_vec = PolyQ.simulate(circ)
 print(st_vec)
 ```
 
+### 🚀 New: QASM import/export & circuit builder
+
+The Rust library now understands OpenQASM files and exposes a lightweight
+`Circuit` type with builder methods.  You can load a `.qasm` file, tweak the
+circuit programmatically and write it back again:
+
+```rust
+use PolyQ::{Circuit, read_qasm_file, write_qasm_file};
+
+// read a simple QASM2 file from disk
+let c = read_qasm_file("example.qasm").unwrap();
+let mut c = c; // make it mutable
+
+// append a Hadamard on qubit 0 and a CZ between 0 and 1
+c.h(0);
+c.cz(0, 1);
+
+write_qasm_file("modified.qasm", &c).unwrap();
+```
+
+Python clients can also take advantage of the same functionality via the
+existing bindings when the appropriate Python wrapper is enabled (see the
+`demo.ipynb` notebook for examples).
+
+
 ## 📖 References
 
 The full list of references used in the development of PolyQ is available in [`references.bib`](./references.bib).  

@@ -21,5 +21,10 @@ This simulator evaluates quantum circuit amplitudes without using dense matrix-v
 * $h$ is the number of Hadamard gates.
 * **Explanation:** The simulator stores the polynomial terms parsed from the $g$ gates. The largest data structure maintained in memory is the $h \times h$ symplectic adjacency matrix (`b4` represented as a `FixedBitSet` array). By avoiding the $2^n$ dense statevector array, the simulator entirely bypasses the memory limitations that cause standard simulators (like Qiskit-Aer) to crash at high qubit counts.
 
-## applications : peaked quantum circuits , t-count reduction
-## next steps parallize z8 loop with multithreading and spread output statvector in gray code to other workers in cluster with rsmpi
+
+
+# TODO
+
+ - applications : peaked quantum circuits , t-count reduction
+
+ - parallize z8 loop with multithreading and spread output statvector in gray code to other workers in cluster with rsmpi
