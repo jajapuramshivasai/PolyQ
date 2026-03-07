@@ -28,3 +28,5 @@ This simulator evaluates quantum circuit amplitudes without using dense matrix-v
  - applications : peaked quantum circuits , t-count reduction
 
  - parallize z8 loop with multithreading and spread output statvector in gray code to other workers in cluster with rsmpi
+
+ -change haspmap to vec of fixed length , try simd and profile the code
