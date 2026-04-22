@@ -1,3 +1,3 @@
-from .simulation import simulate
+from .lib import QC, DicksonOp
 
-__all__ = ['simulate']
+__all__ = ['QC', 'DicksonOp']
