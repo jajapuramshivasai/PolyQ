@@ -7,12 +7,13 @@ packages = ["PolyQ"]
 
 [project]
 name = "PolyQ"
-version = "0.1.0"
+version = "0.9.0"
 description = "A novel approach to simulate Quantum Circuits using Boolean Polynomials."
 readme = "README.md"
 requires-python = ">=3.11"
 license = {file = "LICENSE"}
 authors = [
+  { name="C. A. Jajapuram Shiva Sai", email="shiva_sj@ph.iitr.ac.in"}, 
   { name="C. A. Jothishwaran", email="jc_a@ece.iitr.ac.in"}, 
   { name="Aarav Ratra", email="a_ratra@ph.iitr.ac.in"},
   { name="Satyam Sonaniya", email="satyam_s@ece.iitr.ac.in"},

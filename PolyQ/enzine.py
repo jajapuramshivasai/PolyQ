@@ -4,6 +4,10 @@ from qiskit.quantum_info import Statevector
 
 class DicksonOp:
     def __init__(self, op_type, a, b=None):
+        """
+        a: In 'ADD' ops, this is the pivot. In 'SWAP' ops, this is the first index.
+        b: In 'ADD' ops, this is the target. In 'SWAP' ops, this is the second index.
+        """
         self.type, self.a, self.b = op_type, a, b
 
 class QC:
@@ -97,11 +101,13 @@ class QC:
                 if b[k, p] == 1:
                     b[k, :] ^= rp1
                     b[:, k] ^= rp1
-                    ops.append(DicksonOp('ADD', target=k, pivot=p + 1))
+                    # Fixed: Use positional arguments (pivot, target)
+                    ops.append(DicksonOp('ADD', p + 1, k))
                 if b[k, p + 1] == 1:
                     b[k, :] ^= rp
                     b[:, k] ^= rp
-                    ops.append(DicksonOp('ADD', target=k, pivot=p))
+                    # Fixed: Use positional arguments (pivot, target)
+                    ops.append(DicksonOp('ADD', p, k))
             r += 2; p += 2
         return ops, b, r
 
@@ -129,7 +135,6 @@ class QC:
         return sum_val
 
     def get_amplitude(self, y_val, x_val=0):
-        """Evaluates <y|U|x>. x_val defaults to 0 for standard statevector amplitude <y|U|0>."""
         if not self.compiled: raise RuntimeError("Circuit must be compiled first.")
             
         fixed = [None] * self.n_vars
@@ -157,25 +162,23 @@ class QC:
                 if self.b4[orig_u, f]: vu_base[ui] = (vu_base[ui] + 2) % 4
                     
         for op in self.ops:
-            if op.type == 'SWAP': vu_base[op.a], vu_base[op.b] = vu_base[op.b], vu_base[op.a]
-            elif op.type == 'ADD': vu_base[op.b] = (vu_base[op.b] + vu_base[op.a]) % 4
+            if op.type == 'SWAP': 
+                vu_base[op.a], vu_base[op.b] = vu_base[op.b], vu_base[op.a]
+            elif op.type == 'ADD': 
+                # op.a is pivot, op.b is target
+                vu_base[op.b] = (vu_base[op.b] + vu_base[op.a]) % 4
 
         phase_map = {0: 1.0+0j, 1: 1j, 2: -1.0+0j, 3: -1j}
         return phase_map[eps_base] * self._eval_canonical_sum(vu_base, nu) * (2.0 ** (-self.num_h / 2.0))
 
     def get_transition_matrix(self):
-        """Dumps the full 2^n x 2^n unitary matrix U."""
         dim = 2 ** self.num_qubits
         return np.array([[self.get_amplitude(y, x) for x in range(dim)] for y in range(dim)], dtype=np.complex128)
 
     def print_circuit_parameters(self):
-        """Prints the underlying circuit metrics and mathematical bounds."""
-        if not self.compiled:
-            raise RuntimeError("Circuit must be compiled first.")
-            
+        if not self.compiled: raise RuntimeError("Circuit must be compiled first.")
         nu = len(self.uvars_skeleton)
         m = self.rank // 2
-        
         print(f"\n{'='*60}\n   CIRCUIT METRICS & SIMULATION PARAMETERS\n{'='*60}")
         print(f"Total Qubits (n)           : {self.num_qubits}")
         print(f"Total F2 Variables         : {self.n_vars}")
@@ -187,7 +190,6 @@ class QC:
         print(f"{'='*60}\n")
 
     def print_analytic_formula(self, transition_mode=True):
-        """Prints F2 functions. If transition_mode is True, shows <y|U|x>. Else, <y|U|0>."""
         nu = len(self.uvars_skeleton)
         n_cols = 2 * self.num_qubits + 1 if transition_mode else self.num_qubits + 1
         coeff_matrix = np.zeros((nu, n_cols), dtype=np.int8)
@@ -197,7 +199,6 @@ class QC:
             if transition_mode:
                 for xi in range(self.num_qubits):
                     if self.b4[orig_u, xi]: coeff_matrix[ui, xi] = 2 
-                    
             for yi in range(self.num_qubits):
                 if self.b4[orig_u, self.output_vars[yi]]:
                     col_idx = self.num_qubits + yi if transition_mode else yi
@@ -218,10 +219,8 @@ class QC:
 
         title = "<y|U|x>" if transition_mode else "Statevector <y|U|0>"
         print(f"\n{'='*60}\n   ANALYTICAL FUNCTIONS FOR {title}\n{'='*60}")
-        
         n1_terms = [f"({build_xor_expr(j)})" for j in range(self.rank)]
         print(f"1. EXPONENTIAL SUM VARIABLES\n   N1 = {' + '.join(n1_terms) if n1_terms else '0'}\n   N0 = {self.rank} - N1\n")
-        
         zero_conditions = [build_xor_expr(k) for k in range(self.rank, nu)]
         print("2. ZERO AMPLITUDE CONDITIONS (Balanced Function)")
         if zero_conditions:
@@ -233,26 +232,24 @@ class QC:
         if not self.compiled: self.compile()
         dim = 2 ** self.num_qubits
         custom_sv = np.array([self.get_amplitude(y, x_val=0) for y in range(dim)])
-            
         qiskit_qc = QuantumCircuit(self.num_qubits)
         for g in self.gates: getattr(qiskit_qc, g[0].lower())(*g[1:])
-            
         max_diff = np.max(np.abs(Statevector(qiskit_qc).data - custom_sv))
         print(f"{'✅ PASS!' if max_diff < 1e-10 else '❌ FAIL!'} Max deviation: {max_diff:.2e}")
 
-
 if __name__ == "__main__":
     qc = QC(num_qubits=2)
-    # qc.h(0); qc.h(1); qc.cz(0, 1); qc.s(0); qc.z(1); qc.h(0); qc.h(1); qc.cz(0, 1)
+    qc.h(1)
     qc.h(0)
     qc.cz(0, 1)
+    qc.z(1)
     qc.h(0)
+    qc.h(1)
+    qc.s(1)
+    qc.h(1)
     
     qc.compile()
-    
-    # Print the requested parameters
     qc.print_circuit_parameters()
-    
     qc.verify_against_qiskit()
     qc.print_analytic_formula(transition_mode=True)
     
@@ -260,3 +257,13 @@ if __name__ == "__main__":
     print("\n--- Full Unitary Transition Matrix U ---")
     print(np.round(U, 3))
     print(f"\nUnitarity Check (U^dagger * U == I): {'✅ PASS' if np.allclose(np.round(U.conj().T @ U, 10), np.eye(4)) else '❌ FAIL'}")
+
+# def test_bell_state1():
+#     qc = QC(num_qubits=2)
+#     qc.h(0)
+#     qc.cz(0, 1)
+#     qc.compile()
+#     qc.print_circuit_parameters()
+#     qc.verify_against_qiskit()
+#     qc.print_analytic_formula(transition_mode=True)
+    
