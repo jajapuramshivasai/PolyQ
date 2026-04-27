@@ -1,36 +1,73 @@
 import numpy as np
+from typing import List, Dict, Set, Tuple, Optional, Any
 from qiskit import QuantumCircuit
 from qiskit.quantum_info import Statevector
 
 class DicksonOp:
-    def __init__(self, op_type, a, b=None):
-        """
-        a: In 'ADD' ops, this is the pivot. In 'SWAP' ops, this is the first index.
-        b: In 'ADD' ops, this is the target. In 'SWAP' ops, this is the second index.
-        """
-        self.type, self.a, self.b = op_type, a, b
+    """Represents an F2 linear transformation step during Dickson decomposition."""
+    def __init__(self, op_type: str, a: int, b: Optional[int] = None):
+        self.type = op_type
+        self.a = a  # Pivot for ADD, first index for SWAP
+        self.b = b  # Target for ADD, second index for SWAP
 
 class QC:
-    def __init__(self, num_qubits):
-        self.num_qubits = num_qubits
-        self.gates = []
+    """
+    A Quantum Circuit simulator using Dickson decomposition for F2 quadratic forms.
+    Supports H, Z, S, and CZ gates via Qiskit QuantumCircuit.
+    """
+    def __init__(self, circuit: QuantumCircuit):
+        self.circuit = circuit
+        self.num_qubits = circuit.num_qubits
+        self.gates: List[Tuple[Any, ...]] = []
         self.compiled = False
-        self.b4, self.v4, self.output_vars = None, None, None
-        self.num_h, self.n_vars, self.rank = 0, 0, 0
-        self.uvars_skeleton, self.ops, self.b_reduced = None, [], None
+        
+        # Internal state for the graph-based representation
+        self.b4: Optional[np.ndarray] = None
+        self.v4: Optional[np.ndarray] = None
+        self.output_vars: List[int] = []
+        self.num_h = 0
+        self.n_vars = 0
+        self.rank = 0
+        self.uvars_skeleton: List[int] = []
+        self.ops: List[DicksonOp] = []
+        self.b_reduced: Optional[np.ndarray] = None
+        
+        self._translate_qiskit_circuit()
 
-    def h(self, q): self.gates.append(('H', q))
-    def z(self, q): self.gates.append(('Z', q))
-    def s(self, q): self.gates.append(('S', q))
-    def cz(self, q1, q2): self.gates.append(('CZ', q1, q2))
+    def _translate_qiskit_circuit(self) -> None:
+        """Extracts supported gates from the Qiskit circuit."""
+        for instruction in self.circuit.data:
+            gate = instruction.operation
+            qargs = instruction.qubits
+            # Map qubit objects to their integer indices in the circuit
+            indices = [self.circuit.find_bit(q).index for q in qargs]
+            
+            name = gate.name.lower()
+            if name == 'h':
+                self.gates.append(('H', indices[0]))
+            elif name == 'z':
+                self.gates.append(('Z', indices[0]))
+            elif name == 's':
+                self.gates.append(('S', indices[0]))
+            elif name == 'sdg':
+                self.gates.append(('SDG', indices[0]))
+            elif name == 'cz':
+                self.gates.append(('CZ', indices[0], indices[1]))
+            elif name == 'barrier':
+                continue
+            else:
+                raise ValueError(f"Gate '{name}' is not supported by this simulator. "
+                                 "Supported gates: H, Z, S, Sdg, CZ.")
 
-    def compile(self):
+    def compile(self) -> None:
+        """Translates the gate sequence into an adjacency matrix over F2."""
         wires = [[i] for i in range(self.num_qubits)]
         next_var = self.num_qubits
         self.num_h = 0
-        b4_adj, v4_dict = {}, {}
+        b4_adj: Dict[int, Set[int]] = {}
+        v4_dict: Dict[int, int] = {}
         
-        def ensure_var(v):
+        def ensure_var(v: int):
             b4_adj.setdefault(v, set())
             v4_dict.setdefault(v, 0)
 
@@ -55,6 +92,9 @@ class QC:
             elif g_type == 'S':
                 v = wires[gate[1]][-1]
                 v4_dict[v] = (v4_dict[v] + 1) % 4
+            elif g_type == 'SDG':
+                v = wires[gate[1]][-1]
+                v4_dict[v] = (v4_dict[v] + 3) % 4
 
         self.n_vars = next_var
         self.b4 = np.zeros((self.n_vars, self.n_vars), dtype=np.int8)
@@ -77,7 +117,8 @@ class QC:
         self.ops, self.b_reduced, self.rank = self._plan_dickson_f2(b_u_skel, nu)
         self.compiled = True
 
-    def _plan_dickson_f2(self, b_matrix, n_vars):
+    def _plan_dickson_f2(self, b_matrix: np.ndarray, n_vars: int) -> Tuple[List[DicksonOp], np.ndarray, int]:
+        """Performs Dickson's decomposition to simplify the quadratic form."""
         b, ops, r, p = np.copy(b_matrix), [], 0, 0
         while p + 1 < n_vars:
             pivot = next(((i, j) for i in range(p, n_vars) for j in range(i + 1, n_vars) if b[i, j] == 1), None)
@@ -101,43 +142,19 @@ class QC:
                 if b[k, p] == 1:
                     b[k, :] ^= rp1
                     b[:, k] ^= rp1
-                    # Fixed: Use positional arguments (pivot, target)
                     ops.append(DicksonOp('ADD', p + 1, k))
                 if b[k, p + 1] == 1:
                     b[k, :] ^= rp
                     b[:, k] ^= rp
-                    # Fixed: Use positional arguments (pivot, target)
                     ops.append(DicksonOp('ADD', p, k))
             r += 2; p += 2
         return ops, b, r
 
-    def _eval_canonical_sum(self, vu_base, nu):
-        sum_val, p = 1.0 + 0j, 0
-        while p < self.rank:
-            has_edge = self.b_reduced[p, p + 1]
-            pair_sum = 0j
-            for x1 in (0, 1):
-                for x2 in (0, 1):
-                    ph = ((2 if has_edge and x1 and x2 else 0) + (vu_base[p] if x1 else 0) + (vu_base[p + 1] if x2 else 0)) % 4
-                    if ph == 0: pair_sum += 1
-                    elif ph == 1: pair_sum += 1j
-                    elif ph == 2: pair_sum += -1
-                    elif ph == 3: pair_sum += -1j
-            sum_val *= pair_sum
-            p += 2
-            
-        for k in range(self.rank, nu):
-            val = vu_base[k] % 4
-            if val == 0: sum_val *= 2.0
-            elif val == 1: sum_val *= (1.0 + 1j)
-            elif val == 2: return 0j 
-            elif val == 3: sum_val *= (1.0 - 1j)
-        return sum_val
-
-    def get_amplitude(self, y_val, x_val=0):
+    def get_amplitude(self, y_val: int, x_val: int = 0) -> complex:
+        """Evaluates the transition amplitude <y|U|x>."""
         if not self.compiled: raise RuntimeError("Circuit must be compiled first.")
             
-        fixed = [None] * self.n_vars
+        fixed: List[Optional[int]] = [None] * self.n_vars
         for i in range(self.num_qubits): fixed[i] = (x_val >> i) & 1
             
         for i in range(self.num_qubits):
@@ -165,16 +182,38 @@ class QC:
             if op.type == 'SWAP': 
                 vu_base[op.a], vu_base[op.b] = vu_base[op.b], vu_base[op.a]
             elif op.type == 'ADD': 
-                # op.a is pivot, op.b is target
                 vu_base[op.b] = (vu_base[op.b] + vu_base[op.a]) % 4
 
         phase_map = {0: 1.0+0j, 1: 1j, 2: -1.0+0j, 3: -1j}
         return phase_map[eps_base] * self._eval_canonical_sum(vu_base, nu) * (2.0 ** (-self.num_h / 2.0))
 
-    def get_transition_matrix(self):
+    def _eval_canonical_sum(self, vu_base: np.ndarray, nu: int) -> complex:
+        sum_val, p = 1.0 + 0j, 0
+        while p < self.rank:
+            has_edge = self.b_reduced[p, p + 1]
+            pair_sum = 0j
+            for x1 in (0, 1):
+                for x2 in (0, 1):
+                    ph = ((2 if has_edge and x1 and x2 else 0) + (vu_base[p] if x1 else 0) + (vu_base[p + 1] if x2 else 0)) % 4
+                    if ph == 0: pair_sum += 1
+                    elif ph == 1: pair_sum += 1j
+                    elif ph == 2: pair_sum += -1
+                    elif ph == 3: pair_sum += -1j
+            sum_val *= pair_sum
+            p += 2
+            
+        for k in range(self.rank, nu):
+            val = vu_base[k] % 4
+            if val == 0: sum_val *= 2.0
+            elif val == 1: sum_val *= (1.0 + 1j)
+            elif val == 2: return 0j 
+            elif val == 3: sum_val *= (1.0 - 1j)
+        return sum_val
+
+    def get_transition_matrix(self) -> np.ndarray:
         dim = 2 ** self.num_qubits
         return np.array([[self.get_amplitude(y, x) for x in range(dim)] for y in range(dim)], dtype=np.complex128)
-
+    
     def print_circuit_parameters(self):
         if not self.compiled: raise RuntimeError("Circuit must be compiled first.")
         nu = len(self.uvars_skeleton)
@@ -188,7 +227,7 @@ class QC:
         print(f"Dickson Rank (2m)          : {self.rank} (m = {m})")
         print(f"Kernel Size (Zero Conds.)  : {nu - self.rank}")
         print(f"{'='*60}\n")
-
+        
     def print_analytic_formula(self, transition_mode=True):
         nu = len(self.uvars_skeleton)
         n_cols = 2 * self.num_qubits + 1 if transition_mode else self.num_qubits + 1
@@ -227,43 +266,3 @@ class QC:
             for idx, cond in enumerate(zero_conditions): print(f"   Kernel_{idx}: ({cond}) == 1")
         else: print("   No kernel variables exist.")
         print("="*60 + "\n")
-
-    def verify_against_qiskit(self):
-        if not self.compiled: self.compile()
-        dim = 2 ** self.num_qubits
-        custom_sv = np.array([self.get_amplitude(y, x_val=0) for y in range(dim)])
-        qiskit_qc = QuantumCircuit(self.num_qubits)
-        for g in self.gates: getattr(qiskit_qc, g[0].lower())(*g[1:])
-        max_diff = np.max(np.abs(Statevector(qiskit_qc).data - custom_sv))
-        print(f"{'✅ PASS!' if max_diff < 1e-10 else '❌ FAIL!'} Max deviation: {max_diff:.2e}")
-
-if __name__ == "__main__":
-    qc = QC(num_qubits=2)
-    qc.h(1)
-    qc.h(0)
-    qc.cz(0, 1)
-    qc.z(1)
-    qc.h(0)
-    qc.h(1)
-    qc.s(1)
-    qc.h(1)
-    
-    qc.compile()
-    qc.print_circuit_parameters()
-    qc.verify_against_qiskit()
-    qc.print_analytic_formula(transition_mode=True)
-    
-    U = qc.get_transition_matrix()
-    print("\n--- Full Unitary Transition Matrix U ---")
-    print(np.round(U, 3))
-    print(f"\nUnitarity Check (U^dagger * U == I): {'✅ PASS' if np.allclose(np.round(U.conj().T @ U, 10), np.eye(4)) else '❌ FAIL'}")
-
-# def test_bell_state1():
-#     qc = QC(num_qubits=2)
-#     qc.h(0)
-#     qc.cz(0, 1)
-#     qc.compile()
-#     qc.print_circuit_parameters()
-#     qc.verify_against_qiskit()
-#     qc.print_analytic_formula(transition_mode=True)
-    
