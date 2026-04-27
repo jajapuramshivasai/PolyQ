@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools >= 77.0.3"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
@@ -7,16 +7,18 @@ packages = ["PolyQ"]
 
 [project]
 name = "PolyQ"
-version = "0.1.0"
-description = "A novel approach to simulate Quantum Circuits using Boolean Polynomials."
+version = "0.2.0"
+description = "Ring Polynomial-based Quantum Simulation Library for Complexity reduction and analysis of quantum systems."
 readme = "README.md"
 requires-python = ">=3.11"
 license = {file = "LICENSE"}
 authors = [
+  { name="Jajapuram Shiva Sai", email="shiva_sj@ph.iitr.ac.in"}, 
   { name="C. A. Jothishwaran", email="jc_a@ece.iitr.ac.in"}, 
   { name="Aarav Ratra", email="a_ratra@ph.iitr.ac.in"},
   { name="Satyam Sonaniya", email="satyam_s@ece.iitr.ac.in"},
 ]
+
 dependencies = [
     "numpy>=2", 
     "qiskit>=2.0.0", 

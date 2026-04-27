@@ -1,71 +1,62 @@
-# 🧮 PolyQ
-### A novel approach to simulate Quantum Circuits using Boolean Polynomials.
+# PolyQ
 
-The approach of this simulator is based on the paper first published by Ashley Montanaro in 2017. He, along with previous researchers, proved the connection between Boolean Polynomial and the following Clifford gate set: `{H, Z, CZ, CCZ}`. We extended this approach to include T and S gates, thus making it universal gate set. So the currently supported gate set is `{H, Z, CZ, CCZ, T, S, T†, S†}`
- 
+PolyQ is a Python library that provides a novel approach to simulate Quantum Circuits using Boolean Polynomials.
+
+## Features
+- Simulate quantum circuits efficiently.
+- Built-in support for Boolean polynomial operations.
+- Compatible with Python 3.11 and above.
+
+## Installation
+
+To install PolyQ, clone the repository and build the library:
+
+```bash
+# Clone the repository
+git clone https://github.com/QSDAL-IITR/PolyQ.git
+cd PolyQ
+
+pip install -e .
 
 
-## 🛠️ Get Started 
+# Install dependencies
+pip install -r requirements.txt
 
-For a demo, look at the [demo](./demo.ipynb) file. It shows how to simulate a random circuit with supported gate set using Qiskit's Aer, MQT's DDSIM and PolyQ. In the end, it shows how to simulate a circuit in one line and get its state vector.
+# Build the library
+python -m build
 
-PolyQ for Qiskit `QuantumCircuit` object is available via [PyPI](https://pypi.org/project/PolyQ/0.1.0/) for Linux, macOS, and Windows and supports Python 3.11 and higher.
-
-``` bash
-(venv) $ pip install polyq
+# Install the library
+pip install dist/PolyQ-0.9.0-py3-none-any.whl
 ```
 
-The following code gives an example on the usage:
+## Usage
+
+Import the library and use its modules:
+
 ```python
-from qiskit import QuantumCircuit
-import PolyQ
+from PolyQ import engine, branching
 
-# GHZ state: 
-# |GHZ⟩ = (|000⟩ + |111⟩) / √2
-# Using the property: X = HZH
-circ = QuantumCircuit(3)
-circ.h(0)
-circ.h(1)
-circ.cz(0, 1)
-circ.h(1)
-circ.h(2)
-circ.cz(1, 2)
-circ.h(2)
-
-print(circ.draw(fold=-1))
-
-st_vec = PolyQ.simulate(circ)
-
-print(st_vec)
+# Example usage
+engine.run_simulation()
+branching.perform_branching()
 ```
 
-## 📖 References
+## Testing
 
-The full list of references used in the development of PolyQ is available in [`references.bib`](./references.bib).  
-This file contains BibTeX entries for academic papers, libraries, and resources cited in the project and the upcoming paper.
+To run the tests, use:
 
-
-## 📚 Citation
-
-If you want to cite the **PolyQ**, please use the following format or BibTeX entry:
-
-PolyQ: A novel approach to simulate Quantum Circuits using Boolean Polynomials.  
-Author(s): C. A. Jothishwaran, Aarav Ratra, Satyam Sonaniya   
-Affiliation: IIT Roorkee  
-Repository: https://github.com/QSDAL-IITR/PolyQ  
-Version: v0.1.0  
-DOI: *To be added*  
-Preprint / Paper: *To be added*  
-License: Proprietary
-
-### BibTeX :
-```bibtex
-@misc{polyq2025,
-  title        = {PolyQ: A novel approach to simulate Quantum Circuits using Boolean Polynomials.},
-  author       = {C. A. Jothishwaran and Aarav Ratra and Satyam Sonaniya},
-  year         = {2025},
-  note         = {Version 0.1.0. Available at \url{https://github.com/QSDAL-IITR/PolyQ}},
-  howpublished = {\url{https://github.com/QSDAL-IITR/PolyQ}},
-  license      = {Proprietary},
-}
+```bash
+pytest PolyQ/test_engine
 ```
+
+## Clearing Cache
+
+If you encounter issues related to Python's cached files, you can clear them by removing all `__pycache__` directories. Run the following command in the root directory of the project:
+
+```bash
+find . -name "__pycache__" -exec rm -r {} +
+```
+
+## License
+
+This project is licensed under the terms of the license specified in the `LICENSE` file.
