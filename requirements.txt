@@ -1,5 +1,6 @@
 numpy>=2
 qiskit>=2.0.0
+pytest
 
 # PolyQ on itself only requires numpy for evaluation and qiskit for it's QuantumCicuit object.
 # For benchmarking and testing purposes, one will need the following libraries as intended.
