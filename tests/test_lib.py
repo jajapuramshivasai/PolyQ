@@ -170,7 +170,8 @@ def test_analytic_decomposition():
     qc.h(0)
     qc.rz(np.pi/4, 0) 
     qc.h(0)
-    qc.rz(np.pi/4, 1) 
+
+    qc.rz(np.pi/4, 0) 
 
     uqc = UniversalQC(qc)
     uqc.build_tree()

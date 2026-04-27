@@ -120,7 +120,6 @@ class DicksonEngine:
     def print_analytic_formula(self, transition_mode=True, weight=1.0, branch_label=""):
         """Prints the symbolic boolean structure of the Dickson-reduced quadratic form."""
         nu = len(self.uvars_skeleton)
-        # 2*n + 1 for <y|U|x>, n + 1 for <y|U|0>
         n_cols = 2 * self.num_qubits + 1 if transition_mode else self.num_qubits + 1
         coeff_matrix = np.zeros((nu, n_cols), dtype=np.int8)
         
@@ -242,7 +241,7 @@ class DicksonEngine:
                 s *= (1 - 1j)
         return s
 
-    def get_statevector_gray(self, weight_or_sv, total_sv: Optional[np.ndarray] = None) -> np.ndarray:
+    def get_statevector_gray(self, weight_or_sv, total_sv: Optional[np.ndarray] = None, x: int = 0) -> np.ndarray:
         if total_sv is None:
             total_sv = weight_or_sv
             weight: complex = 1.0
@@ -264,9 +263,14 @@ class DicksonEngine:
             elif op.type == 'ADD':
                 m_mat[op.b] = (m_mat[op.b] + m_mat[op.a]) % 4
 
+        # Initialize vu accounting for input x
         vu = np.zeros(nu, dtype=np.int8)
         for ui, u_o in enumerate(self.uvars_skeleton):
             vu[ui] = self.v4[u_o] % 4
+            for xi in range(self.num_qubits):
+                if (x >> xi) & 1 and self.b4[u_o, xi]:
+                    vu[ui] = (vu[ui] + 2) % 4
+        
         for op in self.ops:
             if op.type == 'SWAP':
                 vu[op.a], vu[op.b] = vu[op.b], vu[op.a]
@@ -275,7 +279,7 @@ class DicksonEngine:
 
         norm = 2 ** (-self.num_h / 2)
         gray = 0
-        total_sv[0] += weight * self.get_amplitude(0, 0)
+        total_sv[0] += weight * self.get_amplitude(0, x)
 
         for i in range(1, dim):
             ng = i ^ (i >> 1)
@@ -326,6 +330,7 @@ class UniversalQC:
     def __init__(self, circuit: QuantumCircuit):
         self.circuit = circuit
         self.num_qubits = circuit.num_qubits
+        self.input_phases = np.zeros(self.num_qubits)
         self.output_phases = np.zeros(self.num_qubits)
         self.global_phase = 0.0
         self.root: Optional[BranchNode] = None
@@ -340,6 +345,7 @@ class UniversalQC:
 
         branching_data = []
         self.global_phase = 0.0
+        self.input_phases = np.zeros(self.num_qubits)
         self.output_phases = np.zeros(self.num_qubits)
 
         for i, ins in enumerate(data):
@@ -348,12 +354,17 @@ class UniversalQC:
             if name in ['z', 's', 'sdg', 't', 'rz']:
                 t = {'z': np.pi, 's': np.pi / 2, 'sdg': -np.pi / 2, 't': np.pi / 4}.get(name, ins.operation.params[0] if name == 'rz' else 0)
                 q0 = idxs[0]
+                
+                # Global scalar vs bit-dependent phase logic
+                g_phase_offset = -t / 2 if name == 'rz' else 0
+                if name == 't': g_phase_offset = 0 # Qiskit T is diag(1, exp(i*pi/4))
+
                 if f_h[q0] is None or i < f_h[q0]:
-                    if name == 'rz': self.global_phase -= t / 2
-                    elif name == 't': self.global_phase += np.pi / 8
+                    self.input_phases[q0] += t
+                    self.global_phase += g_phase_offset
                 elif i > l_h[q0]:
                     self.output_phases[q0] += t
-                    if name in ('rz', 't'): self.global_phase -= t / 2
+                    self.global_phase += g_phase_offset
                 else:
                     branching_data.append(ins)
             else:
@@ -383,16 +394,15 @@ class UniversalQC:
                 self._skeleton.append(ins)
         self.engine = DicksonEngine(self._skeleton)
 
-    def get_statevector(self) -> np.ndarray:
+    def get_statevector(self, x: int = 0) -> np.ndarray:
         if self.root is None:
             raise RuntimeError("Call build_tree() before get_statevector().")
-        if self._skeleton is None:
-            self._skeleton = QuantumCircuit(self.num_qubits)
-            for ins in self.circuit.data:
-                if ins.operation.name.lower() in ['h', 'cz']:
-                    self._skeleton.append(ins)
-        engine = DicksonEngine(self._skeleton)
-        self.engine = engine
+        
+        # Calculate Phase contribution from input bitstring x
+        in_ph = 0.0
+        for q in range(self.num_qubits):
+            if (x >> q) & 1: in_ph += self.input_phases[q]
+
         sv = np.zeros(2 ** self.num_qubits, dtype=np.complex128)
         stack = [self.root]
         while stack:
@@ -404,9 +414,11 @@ class UniversalQC:
             for g, idxs in curr.history:
                 if g == 'id': continue
                 getattr(b_qc, g)(*idxs)
-            engine.set_phases(b_qc)
-            engine.get_statevector_gray(curr.weight, sv)
-        final_sv = sv * np.exp(1j * self.global_phase)
+            self.engine.set_phases(b_qc)
+            self.engine.get_statevector_gray(curr.weight, sv, x=x)
+
+        # Apply Condensed Phases: Global * Input * Output
+        final_sv = sv * np.exp(1j * (self.global_phase + in_ph))
         idx_arr = np.arange(2 ** self.num_qubits)
         for q in range(self.num_qubits):
             if self.output_phases[q]:
@@ -415,15 +427,25 @@ class UniversalQC:
         return final_sv
 
     def print_full_analytic_decomposition(self, transition_mode=False):
-        """Iterates through all branches and prints their individual Clifford analytic forms."""
+        """Prints the consolidated boundary phase term and branch XOR logic."""
         if self.root is None:
             print("Tree not built. Call build_tree() first.")
             return
 
         print(f"{'='*60}\nUNIVERSAL QC ANALYTIC DECOMPOSITION\n{'='*60}")
-        print(f"Global Phase Factor: exp(i * {self.global_phase:.6f})")
+        
+        # Construct the consolidated boundary phase term P
+        p_terms = []
+        if abs(self.global_phase) > 1e-9:
+            p_terms.append(f"{self.global_phase:.6f}")
+        for q, ph in enumerate(self.input_phases):
+            if abs(ph) > 1e-9: p_terms.append(f"({ph:.6f} * x_{q})")
         for q, ph in enumerate(self.output_phases):
-            if ph != 0: print(f"Output Phase Qubit {q}: exp(i * {ph:.6f})")
+            if abs(ph) > 1e-9: p_terms.append(f"({ph:.6f} * y_{q})")
+        
+        p_expr = " + ".join(p_terms) if p_terms else "0"
+        print(f"Phase Dependence: phase = exp(i * [{p_expr}])")
+        print("Note: This factor applies globally to all branch amplitudes below.")
         print("")
 
         leaves: List[BranchNode] = []
@@ -436,15 +458,11 @@ class UniversalQC:
                 for i, child in enumerate(node.children):
                     stack.append((child, f"{path} -> {child.label}"))
 
-        # Temporary engine to reuse structural logic
         temp_engine = DicksonEngine(self._skeleton)
-        
         for node, path in leaves:
-            # Replay history to set the specific phase vector for this branch
             b_qc = QuantumCircuit(self.num_qubits)
             for g, idxs in node.history:
                 if g != 'id': getattr(b_qc, g)(*idxs)
-            
             temp_engine.set_phases(b_qc)
             temp_engine.print_analytic_formula(
                 transition_mode=transition_mode, 
