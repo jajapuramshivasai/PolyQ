@@ -2,14 +2,12 @@ import pytest
 import numpy as np
 from qiskit import QuantumCircuit
 from qiskit.quantum_info import Statevector
-# Ensure your merged classes are accessible (e.g., from optimized_sim.py)
 from PolyQ.lib import DicksonEngine, UniversalQC
 
 def get_qiskit_sv(circuit):
     """Helper to get ground truth from Qiskit."""
     return Statevector(circuit).data
 
-# --- TEST PART 1: CORE ENGINE & GRAY CODE OPTIMIZATION ---
 
 @pytest.mark.parametrize("num_qubits", [2, 3, 4])
 def test_engine_consistency(num_qubits):
