@@ -16,6 +16,10 @@ To install PolyQ, clone the repository and build the library:
 git clone https://github.com/QSDAL-IITR/PolyQ.git
 cd PolyQ
 
+#create venv
+python -m venv polyq-dev
+source polyq-dev/bin/activate
+
 pip install -e .
 
 
@@ -27,7 +31,7 @@ pip install -r requirements.txt
 python -m build
 
 # Install the library
-pip install dist/PolyQ-0.9.0-py3-none-any.whl
+pip install dist/PolyQ-0.2.0-py3-none-any.whl #take care of version properly
 ```
 
 ## Usage
@@ -56,8 +60,10 @@ If you want clean up after the work is done
 
 ```bash
 deactivate
-rm -rf .venv
-rm -rf build/ dist/ *.egg-info .eggs/ __pycache__/ .pytest_cache/ src/*.egg-info
+rm -rf polyq-dev
+rm -rf build/ dist/ .eggs/ __pycache__/ .pytest_cache/ __pycache__
+find . -type d -name "__pycache__" -exec rm -rf {} +
+rm -rf *.egg-info
 ```
 
 ## License

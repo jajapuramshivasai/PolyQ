@@ -330,6 +330,7 @@ class UniversalQC:
             
             if name == 'cx': bits[idxs[1]] ^= bits[idxs[0]]
             elif name == 'swap': bits[idxs[0]], bits[idxs[1]] = bits[idxs[1]], bits[idxs[0]]
+            elif name == 'cz' and bits[idxs[0]] and bits[idxs[1]]: phase += np.pi # <--- ADD THIS LIN
             elif name == 'z' and bits[idxs[0]]: phase += np.pi
             elif name == 's' and bits[idxs[0]]: phase += np.pi / 2
             elif name == 'sdg' and bits[idxs[0]]: phase -= np.pi / 2
@@ -361,6 +362,10 @@ class UniversalQC:
                 swapped_idx = idx.copy()
                 swapped_idx[diff] ^= (1 << idxs[0]) | (1 << idxs[1])
                 sv[:] = sv[swapped_idx]
+            elif name == 'cz':                                    # <--- ADD THIS BLOCK
+                mask = (1 << idxs[0]) | (1 << idxs[1])
+                idx_11 = (idx & mask) == mask
+                sv[idx_11] *= -1
             elif name in ['z', 's', 'sdg', 't', 'rz']:
                 mask = 1 << idxs[0]
                 idx_1 = (idx & mask) != 0

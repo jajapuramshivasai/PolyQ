@@ -1,5 +1,5 @@
 Results/run2/arbitrary_h/circuits
-polyq-venv
+polyq-dev
 PolyQ/utils/qasm_to_poly.py
 build/
 dist/
