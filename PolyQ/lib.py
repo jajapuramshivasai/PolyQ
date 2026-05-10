@@ -250,6 +250,161 @@ class DicksonEngine:
         for x in range(dim):
             for y in range(dim): tm[y, x] = self.get_amplitude(y, x)
         return tm
+    
+    
+    
+import numpy as np
+from qiskit import QuantumCircuit
+from typing import List, Tuple
+
+# Assuming DicksonOp is defined as in your lib.py
+# class DicksonOp:
+#     def __init__(self, op_type: str, a: int, b: Optional[int] = None):
+#         self.type, self.a, self.b = op_type, a, b
+
+class DicksonTranspiler:
+    """
+    Synthesizes a minimal-Hadamard Clifford circuit directly from a Z4 
+    Quadratic Form using Dickson block reduction.
+    """
+    def __init__(self, num_qubits: int):
+        self.num_qubits = num_qubits
+
+    def _plan_dickson(self, b: np.ndarray) -> Tuple[List['DicksonOp'], np.ndarray, int]:
+        """
+        Runs the Dickson reduction algorithm on the adjacency matrix.
+        (Matches the logic from your DicksonEngine)
+        """
+        n = self.num_qubits
+        b_w, ops, r, p = np.copy(b), [], 0, 0
+        while p + 1 < n:
+            pivot = next(((i, j) for i in range(p, n) for j in range(i + 1, n) if b_w[i, j] == 1), None)
+            if not pivot: break
+            i, j = pivot
+            
+            # Swap to bring pivot to (p, j)
+            if i != p:
+                b_w[[p, i]] = b_w[[i, p]]
+                b_w[:, [p, i]] = b_w[:, [i, p]]
+                ops.append(DicksonOp('SWAP', p, i))
+                j_act = p if j == i else (i if j == p else j)
+            else: j_act = j
+            
+            # Swap to bring pivot to (p, p+1)
+            if j_act != p + 1:
+                b_w[[p + 1, j_act]] = b_w[[j_act, p + 1]]
+                b_w[:, [p + 1, j_act]] = b_w[:, [j_act, p + 1]]
+                ops.append(DicksonOp('SWAP', p + 1, j_act))
+                
+            rp, rp1 = np.copy(b_w[p, :]), np.copy(b_w[p + 1, :])
+            
+            # Eliminate remaining row/col entries
+            for k in range(p + 2, n):
+                if b_w[k, p]:
+                    b_w[k, :] ^= rp1
+                    b_w[:, k] ^= rp1
+                    ops.append(DicksonOp('ADD', p + 1, k)) # x_k = x_k XOR x_{p+1}
+                if b_w[k, p + 1]:
+                    b_w[k, :] ^= rp
+                    b_w[:, k] ^= rp
+                    ops.append(DicksonOp('ADD', p, k))     # x_k = x_k XOR x_p
+            r += 2
+            p += 2
+        return ops, b_w, r
+
+    def _track_phases(self, v_initial: np.ndarray, ops: List['DicksonOp']) -> np.ndarray:
+        """
+        Updates the linear phase vector v4 according to the variable substitutions.
+        """
+        v_current = np.copy(v_initial) % 4
+        for op in ops:
+            if op.type == 'SWAP':
+                v_current[op.a], v_current[op.b] = v_current[op.b], v_current[op.a]
+            elif op.type == 'ADD':
+                # For x_b -> x_b ^ x_a, the phase contribution v_b moves to v_a
+                v_current[op.a] = (v_current[op.a] + v_current[op.b]) % 4
+        return v_current
+
+    def synthesize(self, b_matrix: np.ndarray, v_vector: np.ndarray) -> QuantumCircuit:
+        """
+        Generates the optimized QuantumCircuit from the B-matrix (entanglement) 
+        and V-vector (phases).
+        """
+        qc = QuantumCircuit(self.num_qubits)
+        
+        # 1. Perform Algebraic Reduction
+        ops, b_reduced, rank = self._plan_dickson(b_matrix)
+        v_reduced = self._track_phases(v_vector, ops)
+
+        # ---------------------------------------------------------
+        # STAGE 1: Left Basis Change (C1 Layer)
+        # Maps algebraic ADD to CNOT (Control=A, Target=B)
+        # ---------------------------------------------------------
+        for op in reversed(ops): # Reverse to build the state preparation
+            if op.type == 'SWAP':
+                qc.swap(op.a, op.b)
+            elif op.type == 'ADD':
+                qc.cx(op.a, op.b)
+
+        qc.barrier(label="C1 Ends")
+
+        # ---------------------------------------------------------
+        # STAGE 2: The Core (Diagonalized Form)
+        # ---------------------------------------------------------
+        # A. Process Rank Variables (Coupled pairs requiring Hadamards)
+        for p in range(0, rank, 2):
+            # The Dickson pair block
+            qc.h(p)
+            qc.h(p + 1)
+            if b_reduced[p, p + 1] == 1:
+                qc.cz(p, p + 1)
+                
+        # B. Process Phases (Z4 diagonal terms)
+        for i in range(self.num_qubits):
+            phase_val = v_reduced[i]
+            if phase_val == 1:
+                qc.s(i)
+            elif phase_val == 2:
+                qc.z(i)
+            elif phase_val == 3:
+                qc.sdg(i)
+
+        qc.barrier(label="Core Ends")
+
+        # ---------------------------------------------------------
+        # STAGE 3: Right Basis Change (C2 Layer)
+        # Inverts the left basis change to restore the target state
+        # ---------------------------------------------------------
+        for op in ops:
+            if op.type == 'SWAP':
+                qc.swap(op.a, op.b)
+            elif op.type == 'ADD':
+                qc.cx(op.a, op.b)
+
+        return qc
+
+# ==========================================================
+# Example Usage
+# ==========================================================
+if __name__ == "__main__":
+    n = 4
+    transpiler = DicksonTranspiler(n)
+    
+    # Example: A highly entangled state represented as a Z4 Quadratic form
+    # 1s on off-diagonal represent CZ interactions
+    b_input = np.array([
+        [0, 1, 1, 0],
+        [1, 0, 1, 1],
+        [1, 1, 0, 1],
+        [0, 1, 1, 0]
+    ], dtype=np.int8)
+    
+    # 0=I, 1=S, 2=Z, 3=Sdg
+    v_input = np.array([0, 1, 2, 3], dtype=np.int8) 
+
+    optimized_circuit = transpiler.synthesize(b_input, v_input)
+    print("Dickson Transpiled Circuit:\n")
+    print(optimized_circuit.draw(output='text'))
 
 class BranchNode:
     def __init__(self, weight, label="ROOT"):
