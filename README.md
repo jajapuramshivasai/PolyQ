@@ -22,6 +22,7 @@ pip install -e .
 # Install dependencies
 pip install -r requirements.txt
 
+
 # Build the library
 python -m build
 
@@ -49,12 +50,14 @@ To run the tests, use:
 pytest PolyQ/test_engine
 ```
 
-## Clearing Cache
+## Clean up
 
-If you encounter issues related to Python's cached files, you can clear them by removing all `__pycache__` directories. Run the following command in the root directory of the project:
+If you want clean up after the work is done
 
 ```bash
-find . -name "__pycache__" -exec rm -r {} +
+deactivate
+rm -rf .venv
+rm -rf build/ dist/ *.egg-info .eggs/ __pycache__/ .pytest_cache/ src/*.egg-info
 ```
 
 ## License

@@ -182,7 +182,7 @@ class DicksonEngine:
         return ([1, 1j, -1, -1j][eps % 4] * self._eval_canonical_sum(vu, nu) * (2 ** (-self.num_h / 2)))
 
     def _calc_eps_from_fixed(self, fixed):
-        eps, f_list = 0, [v for v, val in enumerate(fixed) if val == 1]
+        eps, f_list = [0, [v for v, val in enumerate(fixed) if val == 1]]
         for i, f in enumerate(f_list):
             eps = (eps + self.v4[f]) % 4
             for f2 in f_list[i + 1:]:
@@ -252,90 +252,238 @@ class DicksonEngine:
         return tm
 
 class BranchNode:
-    def __init__(self, weight, history=None, label="ROOT"):
-        self.weight, self.history, self.label, self.children = weight, history if history is not None else [], label, []
+    def __init__(self, weight, label="ROOT"):
+        self.weight = weight
+        self.label = label
+        self.children = []
+        # Pre-cached Z4 state for O(1) state generation
+        self.v4_state: Optional[np.ndarray] = None 
 
 class UniversalQC:
     def __init__(self, circuit: QuantumCircuit):
-        self.circuit, self.num_qubits = circuit, circuit.num_qubits
-        self.input_phases, self.output_phases, self.global_phase = np.zeros(self.num_qubits), np.zeros(self.num_qubits), 0.0
-        self.root, self.engine, self._skeleton = None, None, None
+        self.circuit = circuit
+        self.num_qubits = circuit.num_qubits
+        self.global_phase = 0.0
+        self.EL_gates = []
+        self.core_gates = []
+        self.ER_gates = []
+        self.root = None
+        self.engine = None
+        self._skeleton = None
 
-    def build_tree(self):
+    def _split_circuit(self):
+        """Splits circuit into E_L (left fringes), Core U, and E_R (right fringes)"""
         data = self.circuit.data
-        f_h = [next((i for i, ins in enumerate(data) if ins.operation.name.lower() == 'h' and self.circuit.find_bit(ins.qubits[0]).index == q), None) for q in range(self.num_qubits)]
-        l_h = [next((i for i in range(len(data)-1, -1, -1) if data[i].operation.name.lower() == 'h' and self.circuit.find_bit(data[i].qubits[0]).index == q), None) for q in range(self.num_qubits)]
-        branching_data, self.global_phase = [], 0.0
-        self.input_phases.fill(0.0); self.output_phases.fill(0.0)
-
-        for i, ins in enumerate(data):
+        n = self.num_qubits
+        
+        # 1. Forward pass: Collect E_L gates 
+        in_EL = [True] * n
+        EL_gates, core_gates = [], []
+        
+        for ins in data:
             name = ins.operation.name.lower()
             idxs = [self.circuit.find_bit(q).index for q in ins.qubits]
-            if name in ['z', 's', 'sdg', 't', 'rz']:
-                t = {'z': np.pi, 's': np.pi/2, 'sdg': -np.pi/2, 't': np.pi/4}.get(name, ins.operation.params[0] if name == 'rz' else 0)
-                q0 = idxs[0]
-                g_phase_offset = -t/2 if name == 'rz' else (np.pi/8 if name == 't' else 0)
-                if f_h[q0] is None or i < f_h[q0]:
-                    self.input_phases[q0] += t
-                    self.global_phase += g_phase_offset
-                elif i > l_h[q0]:
-                    self.output_phases[q0] += t
-                    self.global_phase += g_phase_offset
+            
+            if name in ['h', 'rx', 'ry']:
+                for q in idxs: in_EL[q] = False
+                core_gates.append(ins)
+            elif name in ['cx', 'swap']:
+                if in_EL[idxs[0]] and in_EL[idxs[1]]: EL_gates.append(ins)
                 else:
-                    if name == 't': self.global_phase += np.pi / 8
-                    branching_data.append(ins)
-            else: branching_data.append(ins)
+                    for q in idxs: in_EL[q] = False
+                    core_gates.append(ins)
+            else:
+                if all(in_EL[q] for q in idxs): EL_gates.append(ins)
+                else: core_gates.append(ins)
+
+        # 2. Reverse pass: Collect E_R gates from the core remainder
+        in_ER = [True] * n
+        ER_gates, final_core = [], []
+        
+        for ins in reversed(core_gates):
+            name = ins.operation.name.lower()
+            idxs = [self.circuit.find_bit(q).index for q in ins.qubits]
+            
+            if name in ['h', 'rx', 'ry']:
+                for q in idxs: in_ER[q] = False
+                final_core.insert(0, ins)
+            elif name in ['cx', 'swap']:
+                if in_ER[idxs[0]] and in_ER[idxs[1]]: ER_gates.insert(0, ins)
+                else:
+                    for q in idxs: in_ER[q] = False
+                    final_core.insert(0, ins)
+            else:
+                if all(in_ER[q] for q in idxs): ER_gates.insert(0, ins)
+                else: final_core.insert(0, ins)
+
+        self.EL_gates = EL_gates
+        self.core_gates = final_core
+        self.ER_gates = ER_gates
+
+    def _evaluate_EL(self, x: int) -> Tuple[int, complex]:
+        """Evaluates Left fringe affine transformation to provide analytical start state"""
+        bits = [(x >> i) & 1 for i in range(self.num_qubits)]
+        phase = 0j
+        for ins in self.EL_gates:
+            name = ins.operation.name.lower()
+            idxs = [self.circuit.find_bit(q).index for q in ins.qubits]
+            
+            if name == 'cx': bits[idxs[1]] ^= bits[idxs[0]]
+            elif name == 'swap': bits[idxs[0]], bits[idxs[1]] = bits[idxs[1]], bits[idxs[0]]
+            elif name == 'z' and bits[idxs[0]]: phase += np.pi
+            elif name == 's' and bits[idxs[0]]: phase += np.pi / 2
+            elif name == 'sdg' and bits[idxs[0]]: phase -= np.pi / 2
+            elif name == 't' and bits[idxs[0]]: phase += np.pi / 4
+            elif name == 'rz':
+                theta = ins.operation.params[0]
+                if bits[idxs[0]]: phase += theta / 2
+                else: phase -= theta / 2
+                
+        new_x = sum(b << i for i, b in enumerate(bits))
+        return new_x, np.exp(1j * phase)
+
+    def _apply_ER(self, sv: np.ndarray):
+        """Applies Right fringe transformations in-place analytically to avoid core inflation"""
+        idx = np.arange(len(sv))
+        for ins in self.ER_gates:
+            name = ins.operation.name.lower()
+            idxs = [self.circuit.find_bit(q).index for q in ins.qubits]
+            
+            if name == 'cx':
+                c, t = idxs[0], idxs[1]
+                idx_c1 = idx[(idx & (1 << c)) != 0]
+                idx_c1_t0 = idx_c1[(idx_c1 & (1 << t)) == 0]
+                idx_c1_t1 = idx_c1_t0 | (1 << t)
+                sv[idx_c1_t0], sv[idx_c1_t1] = sv[idx_c1_t1], sv[idx_c1_t0]
+            elif name == 'swap':
+                b0, b1 = (idx >> idxs[0]) & 1, (idx >> idxs[1]) & 1
+                diff = b0 != b1
+                swapped_idx = idx.copy()
+                swapped_idx[diff] ^= (1 << idxs[0]) | (1 << idxs[1])
+                sv[:] = sv[swapped_idx]
+            elif name in ['z', 's', 'sdg', 't', 'rz']:
+                mask = 1 << idxs[0]
+                idx_1 = (idx & mask) != 0
+                idx_0 = ~idx_1
+                if name == 'z': sv[idx_1] *= -1
+                elif name == 's': sv[idx_1] *= 1j
+                elif name == 'sdg': sv[idx_1] *= -1j
+                elif name == 't': sv[idx_1] *= np.exp(1j * np.pi / 4)
+                elif name == 'rz':
+                    theta = ins.operation.params[0]
+                    sv[idx_1] *= np.exp(1j * theta / 2)
+                    sv[idx_0] *= np.exp(-1j * theta / 2)
+
+    def build_tree(self):
+        self._split_circuit()
+        
+        # Calculate Phase Accumulation
+        core_t_count = sum(1 for ins in self.core_gates if ins.operation.name.lower() == 't')
+        self.global_phase = core_t_count * (np.pi / 8)
+
+        # Transpile Core skeleton: Support inner CX and SWAP natively in b_reduced form
+        self._skeleton = QuantumCircuit(self.num_qubits)
+        for ins in self.core_gates:
+            name = ins.operation.name.lower()
+            idxs = [self.circuit.find_bit(q).index for q in ins.qubits]
+            if name in ['h', 'cz']: self._skeleton.append(ins)
+            elif name == 'cx':
+                self._skeleton.h(idxs[1]); self._skeleton.cz(idxs[0], idxs[1]); self._skeleton.h(idxs[1])
+            elif name == 'swap':
+                a, b = idxs[0], idxs[1]
+                self._skeleton.h(b); self._skeleton.cz(a, b); self._skeleton.h(b)
+                self._skeleton.h(a); self._skeleton.cz(b, a); self._skeleton.h(a)
+                self._skeleton.h(b); self._skeleton.cz(a, b); self._skeleton.h(b)
+
+        self.engine = DicksonEngine(self._skeleton)
+
+        # Pre-calculate Variable Tracking for O(1) Linear lookups
+        gate_to_vars = []
+        wires = [[i] for i in range(self.num_qubits)]
+        nv = self.num_qubits
+        
+        for ins in self.core_gates:
+            name = ins.operation.name.lower()
+            idxs = [self.circuit.find_bit(q).index for q in ins.qubits]
+            gate_to_vars.append([wires[q][-1] for q in idxs])
+            
+            if name == 'h':
+                wires[idxs[0]].append(nv); nv += 1
+            elif name == 'cx':
+                wires[idxs[1]].append(nv); nv += 1
+                wires[idxs[1]].append(nv); nv += 1
+            elif name == 'swap':
+                a, b = idxs[0], idxs[1]
+                wires[b].append(nv); nv += 1; wires[b].append(nv); nv += 1
+                wires[a].append(nv); nv += 1; wires[a].append(nv); nv += 1
+                wires[b].append(nv); nv += 1; wires[b].append(nv); nv += 1
+
+        self.root = BranchNode(1.0 + 0j)
+        self.root.v4_state = np.zeros(self.engine.n_vars, dtype=np.int8)
 
         def _grow(idx: int, node: BranchNode):
-            if idx == len(branching_data): return
-            ins = branching_data[idx]
-            name, idxs = ins.operation.name.lower(), [self.circuit.find_bit(q).index for q in ins.qubits]
-            if name in ['h', 'cz', 'z', 's', 'sdg', 'id']:
-                node.history.append((name, idxs))
+            if idx == len(self.core_gates): return
+            ins = self.core_gates[idx]
+            name = ins.operation.name.lower()
+            q_vars = gate_to_vars[idx]
+
+            if name in ['h', 'cz', 'cx', 'swap', 'id']:
+                _grow(idx + 1, node)
+            elif name == 'z':
+                node.v4_state[q_vars[0]] = (node.v4_state[q_vars[0]] + 2) % 4
+                _grow(idx + 1, node)
+            elif name == 's':
+                node.v4_state[q_vars[0]] = (node.v4_state[q_vars[0]] + 1) % 4
+                _grow(idx + 1, node)
+            elif name == 'sdg':
+                node.v4_state[q_vars[0]] = (node.v4_state[q_vars[0]] + 3) % 4
                 _grow(idx + 1, node)
             elif name in ('rz', 't'):
                 theta = np.pi/4 if name == 't' else ins.operation.params[0]
-                c1 = BranchNode(node.weight * np.cos(theta/2), node.history + [('id', idxs)], "I")
-                c2 = BranchNode(node.weight * (-1j * np.sin(theta/2)), node.history + [('z', idxs)], "Z")
-                node.children += [c1, c2]; _grow(idx + 1, c1); _grow(idx + 1, c2)
+                c1 = BranchNode(node.weight * np.cos(theta/2), label=node.label+"_I")
+                c1.v4_state = node.v4_state.copy()
+                
+                c2 = BranchNode(node.weight * (-1j * np.sin(theta/2)), label=node.label+"_Z")
+                c2.v4_state = node.v4_state.copy()
+                c2.v4_state[q_vars[0]] = (c2.v4_state[q_vars[0]] + 2) % 4
 
-        self.root = BranchNode(1.0 + 0j)
+                node.children.extend([c1, c2])
+                _grow(idx + 1, c1)
+                _grow(idx + 1, c2)
+
         _grow(0, self.root)
-        self._skeleton = QuantumCircuit(self.num_qubits)
-        for ins in self.circuit.data:
-            if ins.operation.name.lower() in ['h', 'cz']: self._skeleton.append(ins)
-        self.engine = DicksonEngine(self._skeleton)
 
     def get_statevector(self, x: int = 0) -> np.ndarray:
         if self.root is None: raise RuntimeError("Call build_tree() before get_statevector().")
-        in_ph = sum(self.input_phases[q] for q in range(self.num_qubits) if (x >> q) & 1)
+        
+        # Step 1: Pre-process E_L Transform
+        x_core, input_phase = self._evaluate_EL(x)
         sv = np.zeros(2 ** self.num_qubits, dtype=np.complex128)
+        
         stack = [self.root]
         while stack:
             curr = stack.pop()
             if curr.children:
                 stack.extend(curr.children); continue
             
-            # Use fresh circuit, node.history already contains all Clifford gates
-            b_qc = QuantumCircuit(self.num_qubits)
-            for g, idxs in curr.history:
-                if g != 'id': getattr(b_qc, g)(*idxs)
-            self.engine.set_phases(b_qc)
-            self.engine.get_statevector_gray(curr.weight, sv, x=x)
+            # Fast O(1) linear term transfer (No QuantumCircuit reconstruction)
+            self.engine.v4 = curr.v4_state.copy()
+            self.engine.get_statevector_gray(curr.weight, sv, x=x_core)
             
-        final_sv = sv * np.exp(1j * (self.global_phase + in_ph))
-        for q in range(self.num_qubits):
-            if self.output_phases[q]:
-                final_sv[(np.arange(2 ** self.num_qubits) >> q) & 1 == 1] *= np.exp(1j * self.output_phases[q])
+        final_sv = sv * np.exp(1j * self.global_phase) * input_phase
+        
+        # Step 2: Post-process E_R Permutations
+        self._apply_ER(final_sv)
+        
         return final_sv
 
     def print_full_analytic_decomposition(self, transition_mode=False):
         if self.root is None: print("Tree not built."); return
         print(f"{'='*60}\nUNIVERSAL QC ANALYTIC DECOMPOSITION\n{'='*60}")
-        p_terms = ([f"{self.global_phase:.6f}"] if abs(self.global_phase) > 1e-9 else []) + \
-                  [f"({ph:.6f} * x_{q})" for q, ph in enumerate(self.input_phases) if abs(ph) > 1e-9] + \
-                  [f"({ph:.6f} * y_{q})" for q, ph in enumerate(self.output_phases) if abs(ph) > 1e-9]
-        print(f"Phase Dependence: phase = exp(i * [{' + '.join(p_terms) if p_terms else '0'}])\n")
+        print(f"E_L Gates: {len(self.EL_gates)} (Input Affine Transform & Phases)")
+        print(f"E_R Gates: {len(self.ER_gates)} (Output Affine Permutations)")
+        print(f"Core Global Phase from T-gates: {self.global_phase:.6f}\n")
+        
         leaves, stack = [], [(self.root, "ROOT")]
         while stack:
             node, path = stack.pop()
@@ -344,9 +492,5 @@ class UniversalQC:
                 for i, child in enumerate(node.children): stack.append((child, f"{path} -> {child.label}"))
         
         for node, path in leaves:
-            # Use fresh circuit, node.history already contains all Clifford gates
-            b_qc = QuantumCircuit(self.num_qubits)
-            for g, idxs in node.history:
-                if g != 'id': getattr(b_qc, g)(*idxs)
-            self.engine.set_phases(b_qc)
+            self.engine.v4 = node.v4_state.copy()
             self.engine.print_analytic_formula(transition_mode=transition_mode, weight=node.weight, branch_label=path)

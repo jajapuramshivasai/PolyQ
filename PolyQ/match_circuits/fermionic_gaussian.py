@@ -102,7 +102,8 @@ if __name__ == "__main__":
         "IXXI",    # Valid
         "IXYXI",   # Invalid: Y inside the boundary
         "IXXZI",   # Invalid: Does not end in X or Y
-        "II"       # Valid
+        # "II"       # Valid
+        "IIZZI"
     ]
     is_flo_circuit(invalid_ppr_circuit)
     # Output: Circuit is NOT a valid FLO circuit. Invalid gates found: 1 and 2.
