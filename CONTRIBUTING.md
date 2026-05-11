@@ -15,23 +15,27 @@ To install PolyQ, clone the repository and build the library:
 # Clone the repository
 git clone https://github.com/QSDAL-IITR/PolyQ.git
 cd PolyQ
+```
 
+via make 
+
+```bash
+make build
+```
+
+or manually
+
+```bash
 #create venv
-python -m venv polyq-dev
+python3 -m venv polyq-dev
 source polyq-dev/bin/activate
-
 pip install -e .
-
-
 # Install dependencies
 pip install -r requirements.txt
-
-
 # Build the library
 python -m build
-
 # Install the library
-pip install dist/PolyQ-0.2.0-py3-none-any.whl #take care of version properly
+pip install dist/PolyQ-0.2.0-py3-none-any.whl 
 ```
 
 ## Usage
@@ -51,7 +55,7 @@ branching.perform_branching()
 To run the tests, use:
 
 ```bash
-pytest PolyQ/test_core
+pytest
 ```
 
 ## Clean up
@@ -64,6 +68,11 @@ rm -rf polyq-dev
 rm -rf build/ dist/ .eggs/ __pycache__/ .pytest_cache/ __pycache__
 find . -type d -name "__pycache__" -exec rm -rf {} +
 rm -rf *.egg-info
+```
+
+or via make
+```bash
+make clean
 ```
 
 ## License
