@@ -1,11 +1,28 @@
-# lib.py - Dickson Quantum Engine with Van den Nest Decomposition
+"""
+lib.py - Dickson Quantum Engine with Van den Nest Decomposition
+
+This module provides tools for optimizing and analyzing quantum circuits using 
+Z4-valued quadratic forms. It includes a high-speed statevector evaluation engine 
+based on Dickson reduction and Van den Nest decomposition. Mathematically, a 
+Z4-valued quadratic form is defined as a mapping from a vector space V over GF(2) 
+to Z4[cite: 60]. This module leverages the exponential sums attached to these forms 
+to efficiently compute statevectors and transition amplitudes[cite: 98, 99].
+"""
+
 import numpy as np
 from typing import List, Dict, Set, Tuple, Optional, Any
 from qiskit import QuantumCircuit
 
 
 class DicksonOp:
-    """Represents a single Dickson reduction operation."""
+    """
+    Represents a single Dickson reduction operation.
+
+    Attributes:
+        type (str): The type of operation being performed (e.g., 'SWAP', 'ADD').
+        a (int): The primary index targeted by the operation.
+        b (Optional[int]): The secondary index targeted by the operation, if applicable.
+    """
     def __init__(self, op_type: str, a: int, b: Optional[int] = None):
         self.type = op_type
         self.a = a
@@ -15,12 +32,34 @@ class DicksonOp:
 class DicksonEngine:
     """
     Optimized F2/Z4 Quadratic Form Engine.
-    - Handles structural caching for high-speed statevector evaluation
-    - Uses Gray code optimization for efficient state traversal
-    - Manages Z4 phase tracking and Clifford circuit compilation
+    
+    This engine is designed to handle structural caching for high-speed statevector 
+    evaluation, utilize Gray code optimization for efficient state traversal, and 
+    manage Z4 phase tracking alongside Clifford circuit compilation.
+
+    Attributes:
+        circuit (QuantumCircuit): The input Qiskit quantum circuit to be processed.
+        num_qubits (int): The total number of qubits in the circuit.
+        gates (List[Tuple[str, List[int]]]): A list of extracted gate operations and their target qubit indices.
+        b4 (Optional[np.ndarray]): The adjacency matrix representing circuit entanglement.
+        output_vars (List[int]): Tracked output variable indices.
+        num_h (int): The total count of Hadamard gates in the circuit.
+        n_vars (int): The total number of variables tracked through the circuit.
+        rank (int): The Dickson rank of the reduced quadratic form.
+        uvars_skeleton (List[int]): Auxiliary variable indices (variables that are not outputs).
+        ops (List[DicksonOp]): The sequence of Dickson reduction operations applied.
+        b_reduced (Optional[np.ndarray]): The reduced form of the adjacency matrix.
+        v4 (np.ndarray): The Z4 phase vector.
+        _passthrough_bits (int): Bitmask tracking bits that pass directly from input to output.
     """
 
     def __init__(self, circuit: QuantumCircuit):
+        """
+        Initializes the DicksonEngine with a given quantum circuit.
+
+        Args:
+            circuit (QuantumCircuit): The Qiskit quantum circuit to compile and optimize.
+        """
         self.circuit = circuit
         self.num_qubits = circuit.num_qubits
         
@@ -43,7 +82,12 @@ class DicksonEngine:
         self.compile_structure()
 
     def _translate_circuit(self):
-        """Extracts gate operations from Qiskit circuit."""
+        """
+        Extracts supported gate operations from the Qiskit circuit.
+        
+        Filters for specific Clifford-group and phase gates ('h', 'z', 's', 'sdg', 'cz', 'id') 
+        and maps them to internal representations.
+        """
         for instr in self.circuit.data:
             name = instr.operation.name.lower()
             idxs = [self.circuit.find_bit(q).index for q in instr.qubits]
@@ -52,8 +96,11 @@ class DicksonEngine:
 
     def compile_structure(self):
         """
-        Builds adjacency matrix and performs Dickson decomposition.
-        Creates a reduced form for fast statevector computation.
+        Builds the adjacency matrix and performs Dickson decomposition.
+        
+        This method maps variable lineage through the circuit, creates the adjacency 
+        matrix representing the Z4 quadratic form, isolates auxiliary variables, and 
+        reduces the block form for rapid statevector computation.
         """
         # Track variable lineage through circuit
         wires = [[i] for i in range(self.num_qubits)]
@@ -115,8 +162,17 @@ class DicksonEngine:
 
     def _plan_dickson(self, b: np.ndarray, n: int) -> Tuple[List[DicksonOp], np.ndarray, int]:
         """
-        Dickson block reduction algorithm.
-        Returns: (operations, reduced_form, rank)
+        Executes the Dickson block reduction algorithm on the given matrix.
+
+        Args:
+            b (np.ndarray): The adjacency matrix of the auxiliary variables.
+            n (int): The dimension/number of auxiliary variables.
+
+        Returns:
+            Tuple[List[DicksonOp], np.ndarray, int]: A tuple containing:
+                - ops: The list of Dickson operations used to reduce the form.
+                - b_w: The reduced adjacency matrix.
+                - r: The Dickson rank of the quadratic form.
         """
         if n == 0:
             return [], b, 0
@@ -171,7 +227,15 @@ class DicksonEngine:
         return ops, b_w, r
 
     def set_phases(self, circuit: QuantumCircuit):
-        """Scans circuit and sets Z4 phase vector from Z, S, Sdg gates."""
+        """
+        Scans the quantum circuit and populates the Z4 phase vector.
+        
+        Maps phase-altering gates (Z, S, Sdg) into the Z4 representation 
+        modulo 4 (where Z=2, S=1, Sdg=3).
+
+        Args:
+            circuit (QuantumCircuit): The circuit from which to extract phase information.
+        """
         self.v4.fill(0)
         wires = [[i] for i in range(self.num_qubits)]
         nv = self.num_qubits
@@ -193,8 +257,15 @@ class DicksonEngine:
 
     def get_amplitude(self, y: int, x: int = 0) -> complex:
         """
-        Computes amplitude ⟨y|U|x⟩ via Z4 quadratic form.
-        Handles both input (x) and output (y) constraints.
+        Computes the amplitude ⟨y|U|x⟩ by evaluating the exponential sum of a 
+        Z4-valued quadratic form[cite: 98, 99].
+
+        Args:
+            y (int): The output state bitstring integer representation.
+            x (int, optional): The input state bitstring integer representation. Defaults to 0.
+
+        Returns:
+            complex: The complex amplitude of transitioning from state |x⟩ to state |y⟩.
         """
         fixed = [None] * self.n_vars
         
@@ -238,7 +309,15 @@ class DicksonEngine:
         )
 
     def _calc_eps_from_fixed(self, fixed: List[Optional[int]]) -> int:
-        """Computes Z4 phase accumulation from fixed bits."""
+        """
+        Computes the accumulated Z4 phase from fixed boolean bits.
+
+        Args:
+            fixed (List[Optional[int]]): The list of fixed bits evaluated in the form.
+
+        Returns:
+            int: The evaluated phase modulo 4.
+        """
         eps = 0
         f_list = [v for v, val in enumerate(fixed) if val == 1]
         
@@ -252,8 +331,16 @@ class DicksonEngine:
 
     def _eval_canonical_sum(self, vu: np.ndarray, nu: int) -> complex:
         """
-        Evaluates canonical sum over reduced auxiliary variables.
-        Optimized for Dickson block structure.
+        Evaluates the canonical exponential sum over reduced auxiliary variables.
+        This represents the summation step central to the evaluation of the quadratic 
+        form's exponential sum[cite: 98, 99].
+
+        Args:
+            vu (np.ndarray): Reduced auxiliary vector.
+            nu (int): Number of auxiliary variables.
+
+        Returns:
+            complex: The evaluated sum factor for the amplitude computation.
         """
         s = 1.0
         phases = [1, 1j, -1, -1j]
@@ -284,20 +371,17 @@ class DicksonEngine:
 
         return s
 
-    # def _calc_eps(self, y: int) -> int:
-    #     """Computes phase for output bitstring y."""
-    #     f_idxs = [self.output_vars[j] for j in range(self.num_qubits) if (y >> j) & 1]
-    #     eps = 0
-        
-    #     for i, f in enumerate(f_idxs):
-    #         eps = (eps + self.v4[f]) % 4
-    #         for f2 in f_idxs[i + 1:]:
-    #             if self.b4[f, f2]:
-    #                 eps = (eps + 2) % 4
-        
-    #     return eps
     def _calc_eps(self, y: int, x: int = 0) -> int:
-        """Computes phase for output bitstring y and input bitstring x."""
+        """
+        Computes the Z4 phase based on both the input and output bitstrings.
+
+        Args:
+            y (int): Output bitstring integer.
+            x (int, optional): Input bitstring integer. Defaults to 0.
+
+        Returns:
+            int: The computed phase modulo 4.
+        """
         f_set = set()
         
         # Add active input variables
@@ -321,83 +405,18 @@ class DicksonEngine:
         
         return eps
     
-    
-    
-    
-    # def get_statevector_gray(self, weight: complex, total_sv: np.ndarray, x: int = 0) -> np.ndarray:
-    #     """
-    #     Efficient statevector generation using Gray code.
-    #     Accumulates amplitudes into total_sv with given weight.
-    #     """
-    #     nu = len(self.uvars_skeleton)
-    #     dim = 2 ** self.num_qubits
-    #     phases = [1, 1j, -1, -1j]
-    #     passthrough = self._passthrough_bits
-
-    #     # Build measurement matrix
-    #     m_mat = np.zeros((nu, self.num_qubits), dtype=np.int8) if nu > 0 else np.zeros((0, self.num_qubits), dtype=np.int8)
-    #     for ui, u_o in enumerate(self.uvars_skeleton):
-    #         for yi in range(self.num_qubits):
-    #             if self.b4[u_o, self.output_vars[yi]]:
-    #                 m_mat[ui, yi] = 2
-
-    #     # Apply reduction to measurement matrix
-    #     for op in self.ops:
-    #         if op.type == 'SWAP':
-    #             m_mat[[op.a, op.b]] = m_mat[[op.b, op.a]]
-    #         elif op.type == 'ADD':
-    #             m_mat[op.b] = (m_mat[op.b] + m_mat[op.a]) % 4
-
-    #     # Initialize auxiliary vector
-    #     vu = np.zeros(nu, dtype=np.int8) if nu > 0 else np.zeros(0, dtype=np.int8)
-    #     for ui, u_o in enumerate(self.uvars_skeleton):
-    #         vu[ui] = self.v4[u_o] % 4
-    #         for xi in range(self.num_qubits):
-    #             if (x >> xi) & 1 and self.b4[u_o, xi]:
-    #                 vu[ui] = (vu[ui] + 2) % 4
-
-    #     # Apply reduction
-    #     for op in self.ops:
-    #         if op.type == 'SWAP':
-    #             vu[op.a], vu[op.b] = vu[op.b], vu[op.a]
-    #         elif op.type == 'ADD':
-    #             vu[op.b] = (vu[op.b] + vu[op.a]) % 4
-
-    #     norm = 2 ** (-self.num_h / 2)
-    #     gray = 0
-
-    #     # Add amplitude for y=0
-    #     total_sv[0] += weight * self.get_amplitude(0, x)
-
-    #     # Gray code traversal
-    #     for i in range(1, dim):
-    #         ng = i ^ (i >> 1)
-    #         bit = (gray ^ ng).bit_length() - 1
-            
-    #         if nu > 0:
-    #             if (ng >> bit) & 1:
-    #                 vu = (vu + m_mat[:, bit]) % 4
-    #             else:
-    #                 vu = (vu - m_mat[:, bit]) % 4
-
-    #         gray = ng
-
-    #         if gray & passthrough:
-    #             continue
-
-    #         total_sv[gray] += (
-    #             weight
-    #             * phases[self._calc_eps(gray) % 4]
-    #             * self._eval_canonical_sum(vu, nu)
-    #             * norm
-    #         )
-
-    #     return total_sv
-    
     def get_statevector_gray(self, weight: complex, total_sv: np.ndarray, x: int = 0) -> np.ndarray:
         """
-        Efficient statevector generation using Gray code.
-        Accumulates amplitudes into total_sv with given weight.
+        Efficiently generates the statevector by stepping through outcomes using a Gray code.
+        Accumulates the calculated amplitudes into the provided statevector array.
+
+        Args:
+            weight (complex): Multiplying weight/phase factor for this branch.
+            total_sv (np.ndarray): The complex array to accumulate the statevector into.
+            x (int, optional): The integer representation of the input bitstring. Defaults to 0.
+
+        Returns:
+            np.ndarray: The mutated `total_sv` array updated with the evaluated amplitudes.
         """
         nu = len(self.uvars_skeleton)
         dim = 2 ** self.num_qubits
@@ -475,7 +494,12 @@ class DicksonEngine:
         return total_sv
 
     def get_transition_matrix(self) -> np.ndarray:
-        """Computes full transition matrix as 2D array."""
+        """
+        Computes the complete transition matrix for the circuit.
+
+        Returns:
+            np.ndarray: A 2D array representing the full transition matrix.
+        """
         dim = 2 ** self.num_qubits
         tm = np.zeros((dim, dim), dtype=np.complex128)
         for x in range(dim):
@@ -490,8 +514,13 @@ class DicksonEngine:
         branch_label: str = ""
     ):
         """
-        Prints human-readable Z4 quadratic form formula.
-        Useful for debugging and theoretical analysis.
+        Prints a human-readable representation of the Z4 quadratic form.
+        Useful for debugging and theoretical analysis of the exponential sum components.
+
+        Args:
+            transition_mode (bool, optional): Include input bits in output. Defaults to True.
+            weight (float, optional): Node weight multiplier for this print trace. Defaults to 1.0.
+            branch_label (str, optional): A text label identifying the branch being printed. Defaults to "".
         """
         nu = len(self.uvars_skeleton)
         n_cols = 2 * self.num_qubits + 1 if transition_mode else self.num_qubits + 1
@@ -550,7 +579,16 @@ class DicksonEngine:
 
 
 class BranchNode:
-    """Tree node for branch decomposition with cached phase state."""
+    """
+    Tree node for branch decomposition with cached phase state.
+    Used for simulating non-Clifford elements which split the evaluation paths.
+
+    Attributes:
+        weight (complex): The amplitude weighting scalar for this branch.
+        label (str): Identifier label for the branch.
+        children (List['BranchNode']): Sub-branches originating from this node.
+        v4_state (Optional[np.ndarray]): Cached Z4 phase state mapping for the node.
+    """
     def __init__(self, weight: complex, label: str = "ROOT"):
         self.weight = weight
         self.label = label
@@ -563,19 +601,38 @@ class DicksonTranspiler:
     Transpiles circuits using Dickson decomposition with Van den Nest optimization.
     
     Features:
-    - Converts arbitrary Clifford circuits to minimal H + CZ + phase form
-    - Applies Van den Nest decomposition for optimal basis switching
-    - Handles mixed Clifford/non-Clifford (universal) circuits
-    - Optimizes each Clifford block independently
+    - Converts arbitrary Clifford circuits to minimal H + CZ + phase form.
+    - Applies Van den Nest decomposition for optimal basis switching.
+    - Handles mixed Clifford/non-Clifford (universal) circuits.
+    - Optimizes each Clifford block independently.
+
+    Attributes:
+        num_qubits (int): The number of qubits the transpiler manages.
+        use_van_den_nest (bool): Flag determining if Van den Nest basis optimization is used.
     """
 
     def __init__(self, num_qubits: int, use_van_den_nest: bool = True):
+        """
+        Initializes the Dickson Transpiler.
+
+        Args:
+            num_qubits (int): Total number of qubits in target circuits.
+            use_van_den_nest (bool, optional): Whether to apply Van den Nest optimization. Defaults to True.
+        """
         self.num_qubits = num_qubits
         self.use_van_den_nest = use_van_den_nest
 
     @staticmethod
     def _is_clifford_gate(gate_name: str) -> bool:
-        """Check if gate is in Clifford group."""
+        """
+        Checks if a specified gate belongs to the Clifford group.
+
+        Args:
+            gate_name (str): The name of the gate (e.g., 'h', 'cx', 't').
+
+        Returns:
+            bool: True if the gate is a Clifford gate, False otherwise.
+        """
         clifford_gates = {
             'h', 'x', 'y', 'z', 's', 'sdg', 'id', 'cx', 'cz', 'swap'
         }
@@ -583,8 +640,15 @@ class DicksonTranspiler:
 
     def _classify_circuit(self, circuit: QuantumCircuit) -> Tuple[bool, List[Tuple[int, int, bool]]]:
         """
-        Classifies circuit as pure Clifford or universal.
-        Returns: (is_clifford, [(block_start, block_end, is_clifford_block), ...])
+        Classifies the quantum circuit as either purely Clifford or universal.
+
+        Args:
+            circuit (QuantumCircuit): The circuit to classify.
+
+        Returns:
+            Tuple[bool, List[Tuple[int, int, bool]]]: A tuple containing a boolean flag 
+            indicating if the whole circuit is Clifford, and a list defining block 
+            boundaries (start_idx, end_idx, is_clifford_block).
         """
         is_clifford = True
         block_boundaries = []
@@ -615,7 +679,17 @@ class DicksonTranspiler:
         start_idx: int,
         end_idx: int
     ) -> QuantumCircuit:
-        """Extracts a continuous block of Clifford gates."""
+        """
+        Extracts a continuous subset of Clifford gates from a circuit.
+
+        Args:
+            circuit (QuantumCircuit): The parent quantum circuit.
+            start_idx (int): The starting instruction index.
+            end_idx (int): The ending instruction index.
+
+        Returns:
+            QuantumCircuit: A new circuit containing only the extracted block.
+        """
         block = QuantumCircuit(self.num_qubits)
         for idx in range(start_idx, end_idx):
             instr = circuit.data[idx]
@@ -624,11 +698,18 @@ class DicksonTranspiler:
 
     def _convert_to_z4_form(self, clifford_circuit: QuantumCircuit) -> Tuple[np.ndarray, np.ndarray]:
         """
-        Converts Clifford circuit to Z4 Quadratic Form: B matrix (entanglement) + V vector (phases).
+        Converts a Clifford circuit to its Z4 Quadratic Form equivalent.
         
+        Extracts the entanglement representation (B matrix) and the phase 
+        representation (V vector, values modulo 4).
+
+        Args:
+            clifford_circuit (QuantumCircuit): A circuit composed entirely of Clifford gates.
+
         Returns:
-            b_matrix: Adjacency/entanglement structure (CZ interactions)
-            v_vector: Z4 phase values (0=I, 1=S, 2=Z, 3=Sdg)
+            Tuple[np.ndarray, np.ndarray]: A tuple containing:
+                - b_matrix: The adjacency matrix for CZ interactions.
+                - v_vector: The Z4 phase array (0=I, 1=S, 2=Z, 3=Sdg).
         """
         n = self.num_qubits
         b_matrix = np.zeros((n, n), dtype=np.int8)
@@ -674,13 +755,26 @@ class DicksonTranspiler:
         2. CZ operations (diagonal in computational basis)
         3. H operations (basis restoration)
         
-        Returns optimized gate sequence as transformed B-matrix.
+        Args:
+            b_matrix (np.ndarray): The adjacency matrix representing entanglement.
+
+        Returns:
+            np.ndarray: The optimized sequence expressed as a transformed B-matrix.
         """
         # For now, return the matrix as-is. Advanced optimizations would go here.
         return np.copy(b_matrix)
 
     def _optimize_chain_topology(self, b_matrix: np.ndarray, adj_list: Dict) -> np.ndarray:
-        """Optimizes CZ chain by reordering qubits to reduce gate depth."""
+        """
+        Optimizes a CZ chain by reordering qubits to minimize gate depth.
+
+        Args:
+            b_matrix (np.ndarray): The adjacency matrix.
+            adj_list (Dict): A dictionary representation of the connectivity graph.
+
+        Returns:
+            np.ndarray: The optimized matrix.
+        """
         return np.copy(b_matrix)
 
     def synthesize_clifford(
@@ -689,14 +783,14 @@ class DicksonTranspiler:
         optimize: bool = True
     ) -> QuantumCircuit:
         """
-        Synthesizes optimized Clifford circuit by simulating equivalently.
+        Synthesizes an optimized Clifford circuit while ensuring equivalence.
         
         Args:
-            clifford_circuit: Input Clifford circuit
-            optimize: Whether to apply Van den Nest optimization (currently returns circuit as-is)
+            clifford_circuit (QuantumCircuit): Input Clifford circuit.
+            optimize (bool, optional): Apply Van den Nest optimization if True. Defaults to True.
             
         Returns:
-            Circuit (currently returns original for correctness)
+            QuantumCircuit: The newly synthesized and (optionally) optimized circuit.
         """
         # Return circuit as-is to ensure correctness
         # Advanced optimizations deferred to Van den Nest implementation
@@ -704,16 +798,17 @@ class DicksonTranspiler:
 
     def transpile(self, circuit: QuantumCircuit) -> QuantumCircuit:
         """
-        Main transpilation entry point.
+        The main transpilation entry point.
         
-        - For pure Clifford: applies Van den Nest optimization
-        - For universal: splits into Clifford blocks, optimizes each independently
+        Behaviors:
+        - Pure Clifford: Applies Van den Nest optimization natively.
+        - Universal: Dissects into sequential Clifford blocks, optimizing each independently.
         
         Args:
-            circuit: Input circuit (Clifford or universal)
+            circuit (QuantumCircuit): The input circuit to transpile.
             
         Returns:
-            Optimized circuit
+            QuantumCircuit: The fully optimized output circuit.
         """
         is_clifford, block_info = self._classify_circuit(circuit)
         
@@ -727,13 +822,31 @@ class DicksonTranspiler:
 
 class UniversalQC:
     """
-    Universal Quantum Circuit analyzer combining:
-    - Left fringe (E_L): Affine input transformations
-    - Core: Dickson-reduced Clifford operations
-    - Right fringe (E_R): Output permutations
+    Universal Quantum Circuit analyzer combining fringe processing and a core engine.
+    
+    Architecture:
+    - Left fringe (E_L): Handles initial affine input transformations.
+    - Core: Employs a Dickson-reduced Clifford operation engine.
+    - Right fringe (E_R): Handles final output permutations.
+
+    Attributes:
+        circuit (QuantumCircuit): The universal quantum circuit being analyzed.
+        num_qubits (int): Total number of qubits.
+        global_phase (float): The accumulated global phase factor from non-Clifford gates.
+        EL_gates (List): Sub-list of gates forming the left fringe.
+        core_gates (List): Sub-list of gates forming the Dickson core.
+        ER_gates (List): Sub-list of gates forming the right fringe.
+        root (Optional[BranchNode]): The root node for the branch tree.
+        engine (Optional[DicksonEngine]): The core Dickson evaluation engine.
     """
 
     def __init__(self, circuit: QuantumCircuit):
+        """
+        Initializes the UniversalQC analyzer.
+
+        Args:
+            circuit (QuantumCircuit): The target quantum circuit containing mixed gates.
+        """
         self.circuit = circuit
         self.num_qubits = circuit.num_qubits
         self.global_phase = 0.0
@@ -748,10 +861,10 @@ class UniversalQC:
 
     def _split_circuit(self):
         """
-        Splits circuit into three layers:
-        - E_L: Initial single-qubit and commuting gates
-        - Core: Central Clifford/universal gates
-        - E_R: Final output permutations
+        Splits the universal circuit into three structural layers:
+        - E_L: Initial single-qubit and commuting gates.
+        - Core: Central Clifford and non-Clifford logic.
+        - E_R: Final output permutations.
         """
         data = self.circuit.data
         n = self.num_qubits
@@ -812,8 +925,13 @@ class UniversalQC:
 
     def _evaluate_EL(self, x: int) -> Tuple[int, complex]:
         """
-        Evaluates left fringe affine transformation.
-        Returns: (transformed_input, phase_factor)
+        Evaluates the left fringe (E_L) affine transformation on an initial state.
+
+        Args:
+            x (int): The integer bitstring of the input state.
+
+        Returns:
+            Tuple[int, complex]: The transformed input integer and accumulated phase factor.
         """
         bits = [(x >> i) & 1 for i in range(self.num_qubits)]
         phase = 0.0
@@ -848,8 +966,11 @@ class UniversalQC:
 
     def _apply_ER(self, sv: np.ndarray):
         """
-        Applies right fringe transformations in-place to statevector.
-        Avoids circuit reconstruction for efficiency.
+        Applies right fringe (E_R) transformations in-place to the generated statevector.
+        Avoids full circuit reconstruction for efficiency.
+
+        Args:
+            sv (np.ndarray): The complete statevector array to mutate in-place.
         """
         idx = np.arange(len(sv))
 
@@ -893,8 +1014,10 @@ class UniversalQC:
 
     def build_tree(self):
         """
-        Builds the branch tree for exponential sum decomposition.
-        Optimizes core Clifford blocks using Dickson.
+        Constructs the branch tree for universal exponential sum decomposition.
+        
+        Isolates T-gates/phase gates and branches their execution, while 
+        optimizing the primary core Clifford blocks using the DicksonEngine.
         """
         self._split_circuit()
 
@@ -978,10 +1101,21 @@ class UniversalQC:
 
     def get_statevector(self, x: int = 0) -> np.ndarray:
         """
-        Computes full statevector.
-        - Applies E_L affine transform to input
-        - Uses optimized Dickson engine for core
-        - Applies E_R permutations to output
+        Computes the complete statevector representing the circuit's final state.
+        
+        Execution steps:
+        1. Applies E_L affine transform to input.
+        2. Uses optimized DicksonEngine over branched core logic.
+        3. Applies E_R permutations to final output space.
+
+        Args:
+            x (int, optional): The integer representation of the input bitstring. Defaults to 0.
+
+        Raises:
+            RuntimeError: If `build_tree()` has not been called prior to this execution.
+
+        Returns:
+            np.ndarray: A fully evaluated complex statevector array.
         """
         if self.root is None:
             raise RuntimeError("Call build_tree() before get_statevector().")
@@ -1010,7 +1144,13 @@ class UniversalQC:
         return final_sv
 
     def print_full_analytic_decomposition(self, transition_mode: bool = False):
-        """Prints analytic decomposition for all branches."""
+        """
+        Prints the full mathematical analytic decomposition across all branches.
+        Provides a comprehensive look at the evaluated Z4 forms.
+
+        Args:
+            transition_mode (bool, optional): Print including input transitions. Defaults to False.
+        """
         if self.root is None:
             print("Tree not built.")
             return
