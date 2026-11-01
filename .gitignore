@@ -1,5 +1,5 @@
 Results/run2/arbitrary_h/circuits
-polyq-venv
+polyq-dev
 PolyQ/utils/qasm_to_poly.py
 build/
 dist/
@@ -10,3 +10,13 @@ PolyQ.egg-info/
 /acknowledgement
 PolyQ/__pycache__
 /PolyQ/utils/__pycache__
+**/.DS_Store
+theory
+crates/target
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# Pytest cache
+.pytest_cache/
